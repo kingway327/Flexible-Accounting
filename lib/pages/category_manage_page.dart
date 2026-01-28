@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../data/database_helper.dart';
-import '../main.dart';
+import '../constants/categories.dart';
+import '../providers/finance_provider.dart';
 import '../models/models.dart';
 import '../utils/category_icons.dart';
 import '../widgets/category_grid.dart';
@@ -112,9 +113,10 @@ class _CategoryManagePageState extends State<CategoryManagePage>
               if (mounted) {
                 Navigator.pop(context);
                 _loadData();
-                // 刷新 Provider 中的自定义分类
+                // 刷新 Provider 中的自定义分类和筛选类型（同步添加）
                 if (context.mounted) {
                   context.read<FinanceProvider>().refreshCustomCategories();
+                  context.read<FinanceProvider>().refreshFilterTypes();
                 }
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('已添加分类「$name」')),
@@ -219,9 +221,10 @@ class _CategoryManagePageState extends State<CategoryManagePage>
               if (mounted) {
                 Navigator.pop(context);
                 _loadData();
-                // 刷新 Provider 中的自定义分类
+                // 刷新 Provider 中的自定义分类和筛选类型（同步删除）
                 if (context.mounted) {
                   context.read<FinanceProvider>().refreshCustomCategories();
+                  context.read<FinanceProvider>().refreshFilterTypes();
                 }
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('已删除分类「${category.name}」')),
@@ -474,8 +477,9 @@ class _CategoryManagePageState extends State<CategoryManagePage>
               if (mounted) {
                 Navigator.pop(context);
                 _loadData();
-                // 刷新 Provider 中的筛选类型
+                // 刷新 Provider 中的筛选类型和自定义分类（同步删除）
                 context.read<FinanceProvider>().refreshFilterTypes();
+                context.read<FinanceProvider>().refreshCustomCategories();
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('已删除筛选类型「${filterType.name}」')),
                 );
@@ -493,25 +497,11 @@ class _CategoryManagePageState extends State<CategoryManagePage>
 
   // ==================== 分组操作 ====================
 
-  // 预设颜色列表
-  static const List<int> _presetColors = [
-    0xFF4CAF50, // 绿色 (微信)
-    0xFF1976D2, // 蓝色 (支付宝)
-    0xFF9E9E9E, // 灰色
-    0xFFF44336, // 红色
-    0xFFFF9800, // 橙色
-    0xFFFFEB3B, // 黄色
-    0xFF9C27B0, // 紫色
-    0xFF00BCD4, // 青色
-    0xFF795548, // 棕色
-    0xFF607D8B, // 蓝灰色
-    0xFFE91E63, // 粉色
-    0xFF3F51B5, // 靛蓝色
-  ];
+
 
   void _showAddGroupDialog() {
     final controller = TextEditingController();
-    int selectedColor = _presetColors[0];
+    int selectedColor = kGoogleColors[9]; // 默认为 Green
 
     showDialog(
       context: context,
@@ -537,7 +527,7 @@ class _CategoryManagePageState extends State<CategoryManagePage>
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: _presetColors.map((color) {
+                children: kGoogleColors.map((color) {
                   final isSelected = color == selectedColor;
                   return GestureDetector(
                     onTap: () {
@@ -635,7 +625,7 @@ class _CategoryManagePageState extends State<CategoryManagePage>
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: _presetColors.map((color) {
+                children: kGoogleColors.map((color) {
                   final isSelected = color == selectedColor;
                   return GestureDetector(
                     onTap: () {
@@ -722,7 +712,7 @@ class _CategoryManagePageState extends State<CategoryManagePage>
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: _presetColors.map((color) {
+                children: kGoogleColors.map((color) {
                   final isSelected = color == selectedColor;
                   return GestureDetector(
                     onTap: () {
@@ -984,7 +974,9 @@ class _CategoryManagePageState extends State<CategoryManagePage>
                   if (mounted) {
                     Navigator.pop(context);
                     _loadData();
+                    // 刷新自定义分类和筛选类型（同步更新分组）
                     context.read<FinanceProvider>().refreshCustomCategories();
+                    context.read<FinanceProvider>().refreshFilterTypes();
                   }
                 },
               ),
@@ -1009,7 +1001,9 @@ class _CategoryManagePageState extends State<CategoryManagePage>
                     if (mounted) {
                       Navigator.pop(context);
                       _loadData();
+                      // 刷新自定义分类和筛选类型（同步更新分组）
                       context.read<FinanceProvider>().refreshCustomCategories();
+                      context.read<FinanceProvider>().refreshFilterTypes();
                     }
                   },
                 );
@@ -1311,6 +1305,25 @@ class _CategoryManagePageState extends State<CategoryManagePage>
     // 创建 groupId -> group 的映射
     final groupMap = {for (final g in _categoryGroups) g.id: g};
 
+    // 将筛选类型按分组归类
+    final filterTypesByGroup = <int?, List<FilterType>>{};
+    for (final ft in _filterTypes) {
+      filterTypesByGroup.putIfAbsent(ft.groupId, () => []).add(ft);
+    }
+    
+    // 获取所有分组ID并排序
+    // 无分组放在最前面，其他按 sortOrder 排序
+    final sortedGroupIds = filterTypesByGroup.keys.toList()
+      ..sort((a, b) {
+        if (a == null) return -1;
+        if (b == null) return 1;
+        final groupA = groupMap[a];
+        final groupB = groupMap[b];
+        if (groupA == null) return 1;
+        if (groupB == null) return -1;
+        return groupA.sortOrder.compareTo(groupB.sortOrder);
+      });
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1351,27 +1364,56 @@ class _CategoryManagePageState extends State<CategoryManagePage>
           )
         else
           Expanded(
-            child: GridView.builder(
-              padding: const EdgeInsets.all(16),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 4,       // 每行 4 个
-                crossAxisSpacing: 10,
-                mainAxisSpacing: 10,
-                childAspectRatio: 0.85,  // 宽高比
-              ),
-              itemCount: _filterTypes.length,
+            child: ListView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 80), // 底部留出 FAB 空间
+              itemCount: sortedGroupIds.length,
               itemBuilder: (context, index) {
-                final filterType = _filterTypes[index];
-                final group = filterType.groupId != null ? groupMap[filterType.groupId] : null;
-                return FilterTypeGridItem(
-                  filterType: filterType,
-                  groupName: group?.name ?? '无分组',
-                  groupColor: group?.color ?? 0xFF9E9E9E,
-                  onTap: () => _showFilterTypeActionSheet(
-                    filterType,
-                    group?.name ?? '无分组',
-                    group?.color ?? 0xFF9E9E9E,
-                  ),
+                final groupId = sortedGroupIds[index];
+                final types = filterTypesByGroup[groupId] ?? [];
+                final group = groupId != null ? groupMap[groupId] : null;
+                final groupName = group?.name ?? '无分组';
+                final groupColor = group?.color ?? 0xFF9E9E9E;
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12, top: 8),
+                      child: Text(
+                        groupName,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Color(groupColor),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 4,
+                        crossAxisSpacing: 10,
+                        mainAxisSpacing: 10,
+                        childAspectRatio: 0.85,
+                      ),
+                      itemCount: types.length,
+                      itemBuilder: (context, typeIndex) {
+                        final filterType = types[typeIndex];
+                        return FilterTypeGridItem(
+                          filterType: filterType,
+                          groupName: groupName,
+                          groupColor: groupColor,
+                          onTap: () => _showFilterTypeActionSheet(
+                            filterType,
+                            groupName,
+                            groupColor,
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                 );
               },
             ),

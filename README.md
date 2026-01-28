@@ -1,10 +1,10 @@
-# Flexible Accounting (灵活记账) 🪙
+# 自由记账 🪙
 
 [![Flutter](https://img.shields.io/badge/Flutter-v3.0+-02569B?logo=flutter)](https://flutter.dev)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20iOS%20%7C%20Windows-blue)]()
 
-**Flexible Accounting** 是一款秉承“本地优先 (Local-First)”理念打造的跨平台记账与财务分析工具。它致力于在保护用户隐私的同时，提供极度灵活的账单管理、分类整理与深度分析体验。
+**自由记账** 是一款秉承“本地优先 (Local-First)”理念打造的跨平台记账与财务分析工具。它致力于在保护用户隐私的同时，提供极度灵活的账单管理、分类整理与深度分析体验。
 
 ---
 

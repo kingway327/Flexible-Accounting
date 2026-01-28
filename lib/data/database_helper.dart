@@ -478,6 +478,7 @@ class DatabaseHelper {
   }
 
   /// 添加自定义分类
+  /// 同时添加到筛选类型表，保持两表状态一致
   Future<int> insertCustomCategory(String name) async {
     final db = await database;
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -486,7 +487,8 @@ class DatabaseHelper {
       'SELECT MAX(sort_order) as max_order FROM custom_categories',
     );
     final maxOrder = (maxOrderResult.first['max_order'] as int?) ?? 0;
-    return db.insert(
+    
+    final result = await db.insert(
       'custom_categories',
       {
         'name': name,
@@ -495,6 +497,14 @@ class DatabaseHelper {
       },
       conflictAlgorithm: ConflictAlgorithm.ignore,
     );
+    
+    // 同步添加到筛选类型（如果不存在）
+    final filterExists = await isFilterTypeNameExists(name);
+    if (!filterExists) {
+      await insertFilterType(name);
+    }
+    
+    return result;
   }
 
   /// 更新自定义分类名称
@@ -509,8 +519,25 @@ class DatabaseHelper {
   }
 
   /// 删除自定义分类
+  /// 同时删除筛选类型中的同名记录，保持两表状态一致
   Future<int> deleteCustomCategory(int id) async {
     final db = await database;
+    // 先获取分类名称
+    final rows = await db.query(
+      'custom_categories',
+      columns: ['name'],
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    if (rows.isNotEmpty) {
+      final name = rows.first['name'] as String;
+      // 同步删除筛选类型中的同名记录
+      await db.delete(
+        'filter_types',
+        where: 'name = ?',
+        whereArgs: [name],
+      );
+    }
     return db.delete(
       'custom_categories',
       where: 'id = ?',
@@ -542,29 +569,28 @@ class DatabaseHelper {
     return rows.map(FilterType.fromMap).toList();
   }
 
-  /// 添加筛选类型（自动分配到对应分组）
+  /// 添加筛选类型（系统分类自动分配到对应分组，用户自定义分类不分配分组）
   /// 使用 main.dart 中定义的完整分类列表（kWechatTransactionTypes 和 kAlipayCategories）
   Future<int> insertFilterType(String name) async {
     final db = await database;
     final now = DateTime.now().millisecondsSinceEpoch;
 
-    // 自动分配分组：微信类型 → 微信分组，支付宝类型 → 支付宝分组
+    // 只对系统分类自动分配分组：微信类型 → 微信分组，支付宝类型 → 支付宝分组
+    // 用户自定义分类不自动分配分组（保持 groupId 为 null）
     final groups = await db.query('category_groups', columns: ['id', 'name']);
     final groupMap = {for (final g in groups) g['name'] as String: g['id'] as int};
 
     final wechatGroupId = groupMap['微信'];
     final alipayGroupId = groupMap['支付宝'];
-    final customGroupId = groupMap['自定义'];
 
-    // 根据筛选类型名称决定分组
+    // 根据筛选类型名称决定分组（只处理系统分类）
     int? groupId;
     if (kWechatFilterTypes.contains(name) && wechatGroupId != null) {
       groupId = wechatGroupId;
     } else if (kAlipayFilterTypes.contains(name) && alipayGroupId != null) {
       groupId = alipayGroupId;
-    } else if (customGroupId != null) {
-      groupId = customGroupId;
     }
+    // 用户自定义分类不分配分组，groupId 保持 null
 
     // 获取当前最大 sort_order
     final maxOrderResult = await db.rawQuery(
@@ -619,8 +645,27 @@ class DatabaseHelper {
   }
 
   /// 删除筛选类型
+  /// 如果是用户自定义的筛选类型，同时删除自定义分类中的同名记录
   Future<int> deleteFilterType(int id) async {
     final db = await database;
+    // 先获取筛选类型名称
+    final rows = await db.query(
+      'filter_types',
+      columns: ['name'],
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    if (rows.isNotEmpty) {
+      final name = rows.first['name'] as String;
+      // 只删除自定义分类（非系统分类）
+      if (!kWechatFilterTypes.contains(name) && !kAlipayFilterTypes.contains(name)) {
+        await db.delete(
+          'custom_categories',
+          where: 'name = ?',
+          whereArgs: [name],
+        );
+      }
+    }
     return db.delete(
       'filter_types',
       where: 'id = ?',
@@ -736,8 +781,29 @@ class DatabaseHelper {
   }
 
   /// 更新自定义分类的分组
+  /// 同时更新筛选类型中同名记录的分组，保持两表状态一致
   Future<int> updateCustomCategoryGroup(int categoryId, int? groupId) async {
     final db = await database;
+    
+    // 先获取分类名称
+    final rows = await db.query(
+      'custom_categories',
+      columns: ['name'],
+      where: 'id = ?',
+      whereArgs: [categoryId],
+    );
+    
+    if (rows.isNotEmpty) {
+      final name = rows.first['name'] as String;
+      // 同步更新筛选类型中同名记录的分组
+      await db.update(
+        'filter_types',
+        {'group_id': groupId},
+        where: 'name = ?',
+        whereArgs: [name],
+      );
+    }
+    
     return db.update(
       'custom_categories',
       {'group_id': groupId},
