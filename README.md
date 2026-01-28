@@ -12,9 +12,11 @@
 
 - 🔒 **本地优先 & 隐私保护**：所有记账数据存储在用户本地 SQLite 数据库中。无需注册，不上传云端，你的隐私只属于你自己。
 - 📥 **智能账单导入**：完美适配 **微信支付** 与 **支付宝** 导出的账单文件 (CSV/Excel)，一键完成数据同步。
-- 🗂️ **灵活的分组管理**：支持对账单分类进行多级分组，自定义颜色与图标，让财务结构一目了然。<img width="495" height="1018" alt="image" src="https://github.com/user-attachments/assets/391c1a68-4c0e-4cc0-8179-8d8e408811b5" />
+- 🗂️ **灵活的分组管理**：支持对账单分类进行多级分组，自定义颜色与图标，让财务结构一目了然。<img width="495" height="1018" alt="image" src="https://github.com/user-attachments/assets/391c1a68-4c0e-4cc0-8179-8d8e408811b5" /><img width="544" height="1024" alt="image" src="https://github.com/user-attachments/assets/d714ed3a-ac57-4c58-ac42-df6a8241c428" />
 
-- 🛠️ **强大的批量编辑**：支持多选账单批量修改分类、添加备注，极大提升整理效率。
+
+- 🛠️ **强大的批量编辑**：支持多选账单批量修改分类、添加备注，极大提升整理效率。<img width="496" height="1016" alt="image" src="https://github.com/user-attachments/assets/d7a3dd66-d4e4-459b-905f-f27c24aeece7" />
+
 - 🎨 **现代化 UI 设计**：采用 Material 3 设计语言，支持网格化图标视图，操作直观且视觉精美。
 - 📊 **多维筛选过滤**：基于交易类型、分类、分组及搜索详情的深度过滤系统。
 
