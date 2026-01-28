@@ -723,10 +723,26 @@ void showAdvancedFilterModal(
   var typeFilter = initialTypeFilter;
   var selectedCategories = Set<String>.from(initialCategories);
 
-  final groupColorMap = <int, int>{};
-  for (final group in categoryGroups) {
-    groupColorMap[group.id] = group.color;
-  }
+    final groupMap = {for (final group in categoryGroups) group.id: group};
+
+    // 对筛选类型进行排序：优先按分组顺序，同分组按各自顺序
+    final sortedFilterTypes = List<FilterType>.from(filterTypes);
+    sortedFilterTypes.sort((a, b) {
+      // 1. 比较分组
+      final groupA = a.groupId != null ? groupMap[a.groupId] : null;
+      final groupB = b.groupId != null ? groupMap[b.groupId] : null;
+
+      if (groupA == null && groupB != null) return -1; // 无分组排最前
+      if (groupA != null && groupB == null) return 1;
+
+      if (groupA != null && groupB != null) {
+        final groupCompare = groupA.sortOrder.compareTo(groupB.sortOrder);
+        if (groupCompare != 0) return groupCompare;
+      }
+
+      // 2. 同分组内比较 (按 sortOrder 或 id)
+      return a.sortOrder.compareTo(b.sortOrder);
+    });
 
   showModalBottomSheet(
     context: context,
@@ -816,12 +832,12 @@ void showAdvancedFilterModal(
                                 selected: selectedCategories.isEmpty,
                                 onTap: () => setState(() => selectedCategories.clear()),
                               ),
-                              ...filterTypes.map(
+                              ...sortedFilterTypes.map(
                                 (ft) => FilterChip(
                                   label: ft.name,
                                   selected: selectedCategories.contains(ft.name),
                                   groupColor: ft.groupId != null
-                                      ? Color(groupColorMap[ft.groupId] ?? 0xFF9E9E9E)
+                                      ? Color(groupMap[ft.groupId]?.color ?? 0xFF9E9E9E)
                                       : null,
                                   onTap: () => setState(() {
                                     if (selectedCategories.contains(ft.name)) {

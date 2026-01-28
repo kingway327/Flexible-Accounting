@@ -4,57 +4,9 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 import '../models/models.dart';
+import '../constants/categories.dart';
 
-/// 微信交易类型（8 类，包含退款处理）
-const kWechatFilterTypes = [
-  '商户消费',
-  '红包',
-  '转账',
-  '群收款',
-  '二维码收付款',
-  '充值提现',
-  '信用卡还款',
-  '退款',
-];
 
-/// 支付宝交易分类（39 类）
-const kAlipayFilterTypes = [
-  // 日常消费
-  '餐饮美食',
-  '服饰装扮',
-  '日用百货',
-  '家居家装',
-  '数码电器',
-  '运动户外',
-  '美容美发',
-  '母婴亲子',
-  '宠物',
-  '交通出行',
-  '爱车养车',
-  '住房物业',
-  '酒店旅游',
-  '文化休闲',
-  '教育培训',
-  '医疗健康',
-  '生活服务',
-  '公共服务',
-  '商业服务',
-  '公益捐赠',
-  '互助保障',
-  // 金融
-  '投资理财',
-  '保险',
-  '信用借还',
-  '充值缴费',
-  // 潜账相关
-  '收入',
-  '转账红包',
-  '亲友代付',
-  '账户存取',
-  '退款',
-  // 其他
-  '其他',
-];
 
 class DatabaseHelper {
   DatabaseHelper._();
@@ -235,14 +187,14 @@ class DatabaseHelper {
     final customGroupId = groupMap['自定义'];
 
     final batch = db.batch();
-    for (var i = 0; i < kWechatFilterTypes.length + kAlipayFilterTypes.length; i++) {
-      final name = i < kWechatFilterTypes.length
-          ? kWechatFilterTypes[i]
-          : kAlipayFilterTypes[i - kWechatFilterTypes.length];
+    for (var i = 0; i < kWechatTransactionTypes.length + kAlipayCategories.length; i++) {
+      final name = i < kWechatTransactionTypes.length
+          ? kWechatTransactionTypes[i]
+          : kAlipayCategories[i - kWechatTransactionTypes.length];
       int? groupId;
-      if (kWechatFilterTypes.contains(name) && wechatGroupId != null) {
+      if (kWechatTransactionTypes.contains(name) && wechatGroupId != null) {
         groupId = wechatGroupId;
-      } else if (kAlipayFilterTypes.contains(name) && alipayGroupId != null) {
+      } else if (kAlipayCategories.contains(name) && alipayGroupId != null) {
         groupId = alipayGroupId;
       } else if (customGroupId != null) {
         groupId = customGroupId;
@@ -282,7 +234,7 @@ class DatabaseHelper {
     final batch = db.batch();
 
     // 更新微信类型的分组
-    for (final name in kWechatFilterTypes) {
+    for (final name in kWechatTransactionTypes) {
       batch.update(
         'filter_types',
         {'group_id': wechatGroupId},
@@ -292,7 +244,7 @@ class DatabaseHelper {
     }
 
     // 更新支付宝类型的分组
-    for (final name in kAlipayFilterTypes) {
+    for (final name in kAlipayCategories) {
       batch.update(
         'filter_types',
         {'group_id': alipayGroupId},
@@ -585,9 +537,9 @@ class DatabaseHelper {
 
     // 根据筛选类型名称决定分组（只处理系统分类）
     int? groupId;
-    if (kWechatFilterTypes.contains(name) && wechatGroupId != null) {
+    if (kWechatTransactionTypes.contains(name) && wechatGroupId != null) {
       groupId = wechatGroupId;
-    } else if (kAlipayFilterTypes.contains(name) && alipayGroupId != null) {
+    } else if (kAlipayCategories.contains(name) && alipayGroupId != null) {
       groupId = alipayGroupId;
     }
     // 用户自定义分类不分配分组，groupId 保持 null
@@ -625,9 +577,9 @@ class DatabaseHelper {
 
     // 根据新名称决定分组
     int? groupId;
-    if (kWechatFilterTypes.contains(newName) && wechatGroupId != null) {
+    if (kWechatTransactionTypes.contains(newName) && wechatGroupId != null) {
       groupId = wechatGroupId;
-    } else if (kAlipayFilterTypes.contains(newName) && alipayGroupId != null) {
+    } else if (kAlipayCategories.contains(newName) && alipayGroupId != null) {
       groupId = alipayGroupId;
     } else if (customGroupId != null) {
       groupId = customGroupId;
@@ -658,7 +610,7 @@ class DatabaseHelper {
     if (rows.isNotEmpty) {
       final name = rows.first['name'] as String;
       // 只删除自定义分类（非系统分类）
-      if (!kWechatFilterTypes.contains(name) && !kAlipayFilterTypes.contains(name)) {
+      if (!kWechatTransactionTypes.contains(name) && !kAlipayCategories.contains(name)) {
         await db.delete(
           'custom_categories',
           where: 'name = ?',

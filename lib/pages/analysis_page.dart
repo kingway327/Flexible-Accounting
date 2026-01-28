@@ -5,22 +5,12 @@ import 'package:intl/intl.dart';
 import '../data/analysis_helpers.dart';
 import '../data/database_helper.dart';
 import '../models/models.dart';
+import '../widgets/analysis/analysis_common.dart';
+import '../widgets/analysis/weekly_report_view.dart';
+import '../widgets/analysis/monthly_report_view.dart';
+import '../widgets/analysis/yearly_report_view.dart';
 import '../widgets/month_picker.dart';
 import 'transaction_detail_page.dart';
-
-/// 分类对应的颜色（柔和色系，参考支付宝风格）
-const List<Color> kCategoryColors = [
-  Color(0xFF5B8FF9), // 蓝色
-  Color(0xFF5AD8A6), // 绿色
-  Color(0xFFF6BD16), // 黄色
-  Color(0xFFE8684A), // 红色
-  Color(0xFF6DC8EC), // 浅蓝
-  Color(0xFF9270CA), // 紫色
-  Color(0xFFFF9D4D), // 橙色
-  Color(0xFFFF99C3), // 粉色
-  Color(0xFF269A99), // 青色
-  Color(0xFFBDD2FD), // 淡蓝
-];
 
 class AnalysisPage extends StatefulWidget {
   const AnalysisPage({super.key});
@@ -44,7 +34,6 @@ class _AnalysisPageState extends State<AnalysisPage> with TickerProviderStateMix
   int _selectedMonth = DateTime.now().month;
   bool _isExpense = true; // true=支出, false=收入
 
-  int? _touchedPieIndex;
   
   // Tab 控制
   late TabController _tabController;
@@ -63,13 +52,6 @@ class _AnalysisPageState extends State<AnalysisPage> with TickerProviderStateMix
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this, initialIndex: 1);
-    _tabController.addListener(() {
-      if (_tabController.indexIsChanging) {
-        setState(() {
-          _touchedPieIndex = null;
-        });
-      }
-    });
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,
@@ -113,7 +95,7 @@ class _AnalysisPageState extends State<AnalysisPage> with TickerProviderStateMix
       setState(() {
         _selectedYear = year;
         _selectedMonth = month;
-        _touchedPieIndex = null;
+
       });
       _animationController.forward();
     });
@@ -126,7 +108,7 @@ class _AnalysisPageState extends State<AnalysisPage> with TickerProviderStateMix
     _animationController.reverse().then((_) {
       setState(() {
         _isExpense = isExpense;
-        _touchedPieIndex = null;
+
       });
       _animationController.forward();
     });
@@ -231,36 +213,28 @@ class _AnalysisPageState extends State<AnalysisPage> with TickerProviderStateMix
     );
     final weekRangeStr = getWeekRangeString(now, weekOffset: _weekOffset);
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        // Header
-        _buildWeeklyHeaderSection(theme, weeklyTotal, weekRangeStr),
-        const SizedBox(height: 24),
-        // 一周小结（双柱对比图）
-        FadeTransition(
-          opacity: _fadeAnimation,
-          child: _buildWeeklyBarChartSection(theme, weeklyDailyTotals, lastWeekDailyTotals),
+    // FadeTransition is handled by TabBarView usually, but here it was explicit.
+    // We can wrap the whole view in FadeTransition.
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: WeeklyReportView(
+        isExpense: _isExpense,
+        totalAmount: weeklyTotal,
+        weekRangeStr: weekRangeStr,
+        weeklyDailyTotals: weeklyDailyTotals,
+        lastWeekDailyTotals: lastWeekDailyTotals,
+        categoryTotals: weeklyCategoryTotals,
+        onWeekPickerTap: () => _showWeekPicker(context),
+        onTypeChanged: (isExpense) => _switchExpenseType(isExpense),
+        onDayTap: (day) => _showWeekDayTransactionsModal(context, day),
+        onCategoryTap: (category, amount, count) => _showWeeklyCategoryTransactionsModal(
+          context,
+          category,
+          amount,
+          count,
         ),
-        const SizedBox(height: 24),
-        // 周日历（7天横向）
-        FadeTransition(
-          opacity: _fadeAnimation,
-          child: _buildWeeklyCalendarSection(theme, weeklyDailyTotals),
-        ),
-        const SizedBox(height: 24),
-        // 分类饼图
-        FadeTransition(
-          opacity: _fadeAnimation,
-          child: _buildPieChartSection(theme, weeklyCategoryTotals, weeklyTotal),
-        ),
-        const SizedBox(height: 16),
-        // 分类排行榜
-        FadeTransition(
-          opacity: _fadeAnimation,
-          child: _buildCategoryRankingSectionForWeek(theme, weeklyCategoryTotals, weeklyTotal),
-        ),
-      ],
+        currencyFormatter: _currencyFormatter,
+      ),
     );
   }
 
@@ -292,31 +266,34 @@ class _AnalysisPageState extends State<AnalysisPage> with TickerProviderStateMix
       monthCount: 5,
     );
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        _buildHeaderSection(theme, totalAmount),
-        const SizedBox(height: 24),
-        FadeTransition(
-          opacity: _fadeAnimation,
-          child: _buildMonthlyBarChartSection(theme, monthlyTotals),
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: MonthlyReportView(
+        selectedYear: _selectedYear,
+        selectedMonth: _selectedMonth,
+        isExpense: _isExpense,
+        totalAmount: totalAmount,
+        dailyTotals: dailyTotals,
+        categoryTotals: categoryTotals,
+        monthlyTotals: monthlyTotals,
+        onMonthPickerTap: () => _showMonthYearPicker(context),
+        onTypeChanged: (isExpense) => _switchExpenseType(isExpense),
+        onMonthSwitched: (year, month) => _switchMonth(year, month),
+        onDayTap: (day, amount) => _showDayTransactionsModal(context, day, amount),
+        onCategoryTap: (category, amount, count) => _showCategoryTransactionsModal(
+          context,
+          category,
+          amount,
+          count,
         ),
-        const SizedBox(height: 24),
-        FadeTransition(
-          opacity: _fadeAnimation,
-          child: _buildCalendarSection(theme, dailyTotals),
+        currencyFormatter: _currencyFormatter,
+        hasDataForMonth: (year, month) => hasDataForMonth(
+          records: _allRecords,
+          year: year,
+          month: month,
+          isExpense: _isExpense,
         ),
-        const SizedBox(height: 24),
-        FadeTransition(
-          opacity: _fadeAnimation,
-          child: _buildPieChartSection(theme, categoryTotals, totalAmount),
-        ),
-        const SizedBox(height: 16),
-        FadeTransition(
-          opacity: _fadeAnimation,
-          child: _buildCategoryRankingSection(theme, categoryTotals, totalAmount),
-        ),
-      ],
+      ),
     );
   }
 
@@ -344,533 +321,36 @@ class _AnalysisPageState extends State<AnalysisPage> with TickerProviderStateMix
       isExpense: _isExpense,
     );
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        // Header
-        _buildYearlyHeaderSection(theme, yearlyTotal),
-        const SizedBox(height: 24),
-        // 月度对比图
-        FadeTransition(
-          opacity: _fadeAnimation,
-          child: _buildYearlyBarChartSection(theme, yearlyMonthlyTotals, yearlyAverage),
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: YearlyReportView(
+        selectedYear: _selectedYear,
+        isExpense: _isExpense,
+        totalAmount: yearlyTotal,
+        selectedYearlyMonth: _selectedYearlyMonth ?? DateTime.now().month,
+        averageAmount: yearlyAverage,
+        yearlyMonthlyTotals: yearlyMonthlyTotals,
+        categoryTotals: yearlyCategoryTotals,
+        onYearPickerTap: () => _showYearPicker(context),
+        onTypeChanged: (isExpense) => _switchExpenseType(isExpense),
+        onMonthChanged: (month) {
+          setState(() {
+            _selectedYearlyMonth = month;
+            // No need to reset _touchedPieIndex (handled in widget state)
+          });
+        },
+        onMonthTap: (month, amount) => _showYearlyMonthTransactionsModal(context, month, amount),
+        onCategoryTap: (category, amount, count) => _showYearlyCategoryTransactionsModal(
+          context,
+          category,
+          amount,
+          count,
         ),
-        const SizedBox(height: 24),
-        // 分类饼图
-        FadeTransition(
-          opacity: _fadeAnimation,
-          child: _buildPieChartSection(theme, yearlyCategoryTotals, yearlyTotal),
-        ),
-        const SizedBox(height: 16),
-        // 分类排行榜
-        FadeTransition(
-          opacity: _fadeAnimation,
-          child: _buildCategoryRankingSectionForYear(theme, yearlyCategoryTotals, yearlyTotal),
-        ),
-      ],
+        currencyFormatter: _currencyFormatter,
+      ),
     );
   }
 
-  /// 周度 Header
-  Widget _buildWeeklyHeaderSection(ThemeData theme, int totalAmount, String weekRangeStr) {
-    final isThisWeek = _weekOffset == 0;
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            GestureDetector(
-              onTap: () => _showWeekPicker(context),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    isThisWeek ? '本周' : weekRangeStr,
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Icon(
-                    Icons.keyboard_arrow_down,
-                    size: 24,
-                    color: theme.colorScheme.onSurface,
-                  ),
-                ],
-              ),
-            ),
-            SegmentedButton<bool>(
-              segments: const [
-                ButtonSegment(value: true, label: Text('支出')),
-                ButtonSegment(value: false, label: Text('收入')),
-              ],
-              selected: {_isExpense},
-              onSelectionChanged: (value) {
-                if (value.isNotEmpty) {
-                  _switchExpenseType(value.first);
-                }
-              },
-              style: const ButtonStyle(
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TweenAnimationBuilder<double>(
-            tween: Tween<double>(begin: 0, end: totalAmount / 100),
-            duration: const Duration(milliseconds: 500),
-            curve: Curves.easeOut,
-            builder: (context, value, child) {
-              return Text(
-                _currencyFormatter.format(value),
-                style: theme.textTheme.headlineLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: _isExpense ? Colors.red.shade700 : Colors.green.shade700,
-                ),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// 年度 Header
-  Widget _buildYearlyHeaderSection(ThemeData theme, int totalAmount) {
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            GestureDetector(
-              onTap: () => _showYearPicker(context),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '$_selectedYear年',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Icon(
-                    Icons.keyboard_arrow_down,
-                    size: 24,
-                    color: theme.colorScheme.onSurface,
-                  ),
-                ],
-              ),
-            ),
-            SegmentedButton<bool>(
-              segments: const [
-                ButtonSegment(value: true, label: Text('支出')),
-                ButtonSegment(value: false, label: Text('收入')),
-              ],
-              selected: {_isExpense},
-              onSelectionChanged: (value) {
-                if (value.isNotEmpty) {
-                  _switchExpenseType(value.first);
-                }
-              },
-              style: const ButtonStyle(
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TweenAnimationBuilder<double>(
-            tween: Tween<double>(begin: 0, end: totalAmount / 100),
-            duration: const Duration(milliseconds: 500),
-            curve: Curves.easeOut,
-            builder: (context, value, child) {
-              return Text(
-                _currencyFormatter.format(value),
-                style: theme.textTheme.headlineLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: _isExpense ? Colors.red.shade700 : Colors.green.shade700,
-                ),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// 一周小结：双柱对比图（上周 vs 当周）
-  Widget _buildWeeklyBarChartSection(
-    ThemeData theme,
-    List<WeeklyDailyTotal> currentWeek,
-    List<WeeklyDailyTotal> lastWeek,
-  ) {
-    if (currentWeek.isEmpty) return const SizedBox.shrink();
-
-    final allAmounts = [...currentWeek.map((e) => e.amount), ...lastWeek.map((e) => e.amount)];
-    final maxAmount = allAmounts.fold<int>(0, (max, e) => e > max ? e : max);
-    final maxY = maxAmount > 0 ? (maxAmount / 100).ceilToDouble() * 1.3 : 100.0;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              '一周小结',
-              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-            ),
-            // 图例
-            Row(
-              children: [
-                Container(
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: kLightBlue,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Text('上周', style: theme.textTheme.bodySmall),
-                const SizedBox(width: 12),
-                Container(
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: kDarkBlue,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Text('当周', style: theme.textTheme.bodySmall),
-              ],
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        SizedBox(
-          height: 220,
-          child: BarChart(
-            BarChartData(
-              alignment: BarChartAlignment.spaceAround,
-              maxY: maxY,
-              titlesData: FlTitlesData(
-                show: true,
-                bottomTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 30,
-                    getTitlesWidget: (value, meta) {
-                      final index = value.toInt();
-                      if (index >= 0 && index < currentWeek.length) {
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Text(
-                            currentWeek[index].dayLabel,
-                            style: theme.textTheme.bodySmall,
-                          ),
-                        );
-                      }
-                      return const SizedBox.shrink();
-                    },
-                  ),
-                ),
-                leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-              ),
-              gridData: const FlGridData(show: false),
-              borderData: FlBorderData(show: false),
-              barGroups: List.generate(7, (index) {
-                final lastWeekAmount = index < lastWeek.length ? lastWeek[index].amount / 100 : 0.0;
-                final currentWeekAmount = index < currentWeek.length ? currentWeek[index].amount / 100 : 0.0;
-                return BarChartGroupData(
-                  x: index,
-                  barRods: [
-                    BarChartRodData(
-                      toY: lastWeekAmount,
-                      color: kLightBlue,
-                      width: 16,
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-                    ),
-                    BarChartRodData(
-                      toY: currentWeekAmount,
-                      color: kDarkBlue,
-                      width: 16,
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-                    ),
-                  ],
-                );
-              }),
-              barTouchData: BarTouchData(
-                enabled: true,
-                touchTooltipData: BarTouchTooltipData(
-                  getTooltipColor: (group) => kDarkBlue,
-                  getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                    final label = rodIndex == 0 ? '上周' : '当周';
-                    return BarTooltipItem(
-                      '$label: ¥${rod.toY.toStringAsFixed(2)}',
-                      const TextStyle(color: Colors.white, fontSize: 12),
-                    );
-                  },
-                ),
-              ),
-            ),
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeInOut,
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// 周日历：7天横向排列
-  Widget _buildWeeklyCalendarSection(ThemeData theme, List<WeeklyDailyTotal> weeklyDailyTotals) {
-    return Row(
-      children: weeklyDailyTotals.map((day) {
-        final hasAmount = day.amount > 0;
-        return Expanded(
-          child: GestureDetector(
-            onTap: hasAmount ? () => _showWeekDayTransactionsModal(context, day) : null,
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 2),
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                color: day.isToday ? kTodayBg : null,
-                borderRadius: BorderRadius.circular(8),
-                border: day.isToday
-                    ? Border.all(color: kDarkBlue, width: 1)
-                    : Border.all(color: theme.colorScheme.outlineVariant, width: 0.5),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    day.dateLabel,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontWeight: day.isToday ? FontWeight.bold : FontWeight.w500,
-                      color: day.isToday ? kDarkBlue : null,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    hasAmount ? (day.amount / 100).toStringAsFixed(0) : '-',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: hasAmount ? theme.colorScheme.onSurface : theme.colorScheme.onSurfaceVariant,
-                      fontWeight: hasAmount ? FontWeight.w500 : FontWeight.normal,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      }).toList(),
-    );
-  }
-
-  /// 年度月度对比图
-  Widget _buildYearlyBarChartSection(
-    ThemeData theme,
-    List<YearlyMonthTotal> monthlyTotals,
-    int averageAmount,
-  ) {
-    if (monthlyTotals.isEmpty) return const SizedBox.shrink();
-
-    final maxAmount = monthlyTotals.fold<int>(0, (max, e) => e.amount > max ? e.amount : max);
-    final avgY = averageAmount / 100;
-    final maxY = (maxAmount > averageAmount ? maxAmount : averageAmount) / 100 * 1.3;
-    final selectedMonth = _selectedYearlyMonth ?? DateTime.now().month;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              '月度对比',
-              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-            ),
-            // 图例
-            Row(
-              children: [
-                Container(width: 16, height: 2, color: Colors.orange),
-                const SizedBox(width: 4),
-                Text('月支出均值', style: theme.textTheme.bodySmall),
-              ],
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        SizedBox(
-          height: 250,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              // 计算每个柱子的位置，用于放置可点击的 tooltip
-              final chartWidth = constraints.maxWidth;
-              final barWidth = chartWidth / 12;
-              
-              return Stack(
-                children: [
-                  // 柱状图
-                  BarChart(
-                    BarChartData(
-                      alignment: BarChartAlignment.spaceAround,
-                      maxY: maxY > 0 ? maxY : 100,
-                      titlesData: FlTitlesData(
-                        show: true,
-                        bottomTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            reservedSize: 30,
-                            getTitlesWidget: (value, meta) {
-                              final index = value.toInt();
-                              if (index >= 0 && index < 12) {
-                                return Padding(
-                                  padding: const EdgeInsets.only(top: 8),
-                                  child: Text(
-                                    '${index + 1}',
-                                    style: theme.textTheme.bodySmall,
-                                  ),
-                                );
-                              }
-                              return const SizedBox.shrink();
-                            },
-                          ),
-                        ),
-                        leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                      ),
-                      gridData: const FlGridData(show: false),
-                      borderData: FlBorderData(show: false),
-                      extraLinesData: ExtraLinesData(
-                        horizontalLines: [
-                          HorizontalLine(
-                            y: avgY,
-                            color: Colors.orange,
-                            strokeWidth: 1,
-                            dashArray: [5, 5],
-                            label: HorizontalLineLabel(
-                              show: true,
-                              alignment: Alignment.topRight,
-                              labelResolver: (line) => avgY.toStringAsFixed(0),
-                              style: const TextStyle(
-                                color: Colors.orange,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      barGroups: monthlyTotals.asMap().entries.map((entry) {
-                        final index = entry.key;
-                        final data = entry.value;
-                        final isSelected = data.month == selectedMonth;
-                        return BarChartGroupData(
-                          x: index,
-                          barRods: [
-                            BarChartRodData(
-                              toY: data.amount / 100,
-                              color: isSelected ? kDarkBlue : kLightBlue,
-                              width: 20,
-                              borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-                            ),
-                          ],
-                          // 不显示内置 tooltip，使用自定义的
-                          showingTooltipIndicators: [],
-                        );
-                      }).toList(),
-                      barTouchData: BarTouchData(
-                        enabled: true,
-                        touchCallback: (event, response) {
-                          if (event.isInterestedForInteractions && response?.spot != null) {
-                            final index = response!.spot!.touchedBarGroupIndex;
-                            if (index >= 0 && index < 12) {
-                              setState(() {
-                                _selectedYearlyMonth = index + 1;
-                                _touchedPieIndex = null;
-                              });
-                            }
-                          }
-                        },
-                        touchTooltipData: BarTouchTooltipData(
-                          getTooltipColor: (group) => Colors.transparent,
-                          tooltipPadding: EdgeInsets.zero,
-                          tooltipMargin: 0,
-                          getTooltipItem: (group, groupIndex, rod, rodIndex) => null,
-                        ),
-                      ),
-                    ),
-                    duration: const Duration(milliseconds: 250),
-                    curve: Curves.easeInOut,
-                  ),
-                  // 选中月份的可点击 tooltip
-                  if (monthlyTotals.isNotEmpty)
-                    ...monthlyTotals.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final data = entry.value;
-                      final isSelected = data.month == selectedMonth;
-                      if (!isSelected || data.amount <= 0) return const SizedBox.shrink();
-                      
-                      // 计算 tooltip 位置
-                      final barCenterX = barWidth * index + barWidth / 2;
-                      final barHeight = maxY > 0 ? (data.amount / 100) / maxY : 0;
-                      // 图表高度减去底部标题空间(30)，tooltip 在柱子上方
-                      final chartHeight = 250.0 - 30;
-                      final tooltipY = chartHeight * (1 - barHeight) - 45; // 45 是 tooltip 高度 + margin
-                      
-                      // tooltip 宽度约 90，计算水平位置并确保不超出边界
-                      const tooltipWidth = 90.0;
-                      var tooltipX = barCenterX - tooltipWidth / 2;
-                      // 左边界限制
-                      if (tooltipX < 0) {
-                        tooltipX = 0;
-                      }
-                      // 右边界限制
-                      if (tooltipX + tooltipWidth > chartWidth) {
-                        tooltipX = chartWidth - tooltipWidth;
-                      }
-                      
-                      return Positioned(
-                        left: tooltipX,
-                        top: tooltipY > 0 ? tooltipY : 0,
-                        child: GestureDetector(
-                          onTap: () => _showYearlyMonthTransactionsModal(context, data.month, data.amount),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: kDarkBlue,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              '$_selectedYear年${data.month}月\n¥${(data.amount / 100).toStringAsFixed(2)}',
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    }),
-                ],
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
 
   /// 周选择器弹窗
   void _showWeekPicker(BuildContext context) {
@@ -994,7 +474,7 @@ class _AnalysisPageState extends State<AnalysisPage> with TickerProviderStateMix
     _animationController.reverse().then((_) {
       setState(() {
         _weekOffset = offset;
-        _touchedPieIndex = null;
+
       });
       _animationController.forward();
     });
@@ -1006,7 +486,7 @@ class _AnalysisPageState extends State<AnalysisPage> with TickerProviderStateMix
       setState(() {
         _selectedYear = year;
         _selectedYearlyMonth = null;
-        _touchedPieIndex = null;
+
       });
       _animationController.forward();
     });
@@ -1107,100 +587,6 @@ class _AnalysisPageState extends State<AnalysisPage> with TickerProviderStateMix
           },
         );
       },
-    );
-  }
-
-  /// 周度分类排行榜（复用样式，但数据来源不同）
-  Widget _buildCategoryRankingSectionForWeek(
-    ThemeData theme,
-    List<CategoryTotal> categoryTotals,
-    int totalAmount,
-  ) {
-    if (categoryTotals.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 40),
-        child: Center(
-          child: Text(
-            '暂无数据',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ...categoryTotals.asMap().entries.map((entry) {
-          final index = entry.key;
-          final data = entry.value;
-          final percentage = totalAmount > 0 ? (data.amount / totalAmount * 100) : 0.0;
-
-          return _buildCategoryItem(
-            theme: theme,
-            rank: index + 1,
-            category: data.category,
-            percentage: percentage,
-            amount: data.amount,
-            count: data.count,
-            onTap: () => _showWeeklyCategoryTransactionsModal(
-              context,
-              data.category,
-              data.amount,
-              data.count,
-            ),
-          );
-        }),
-      ],
-    );
-  }
-
-  /// 年度分类排行榜
-  Widget _buildCategoryRankingSectionForYear(
-    ThemeData theme,
-    List<CategoryTotal> categoryTotals,
-    int totalAmount,
-  ) {
-    if (categoryTotals.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 40),
-        child: Center(
-          child: Text(
-            '暂无数据',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ...categoryTotals.asMap().entries.map((entry) {
-          final index = entry.key;
-          final data = entry.value;
-          final percentage = totalAmount > 0 ? (data.amount / totalAmount * 100) : 0.0;
-
-          return _buildCategoryItem(
-            theme: theme,
-            rank: index + 1,
-            category: data.category,
-            percentage: percentage,
-            amount: data.amount,
-            count: data.count,
-            onTap: () => _showYearlyCategoryTransactionsModal(
-              context,
-              data.category,
-              data.amount,
-              data.count,
-            ),
-          );
-        }),
-      ],
     );
   }
 
@@ -1472,414 +858,6 @@ class _AnalysisPageState extends State<AnalysisPage> with TickerProviderStateMix
   }
 
   /// Header Section: 日期选择、收支切换、总金额
-  Widget _buildHeaderSection(ThemeData theme, int totalAmount) {
-    return Column(
-      children: [
-        // 日期选择 + 收支切换
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            // 日期选择
-            GestureDetector(
-              onTap: () => _showMonthYearPicker(context),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '$_selectedYear年$_selectedMonth月',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Icon(
-                    Icons.keyboard_arrow_down,
-                    size: 24,
-                    color: theme.colorScheme.onSurface,
-                  ),
-                ],
-              ),
-            ),
-            // 收支切换 (胶囊形式 SegmentedButton)
-            SegmentedButton<bool>(
-              segments: const [
-                ButtonSegment(value: true, label: Text('支出')),
-                ButtonSegment(value: false, label: Text('收入')),
-              ],
-              selected: {_isExpense},
-              onSelectionChanged: (value) {
-                if (value.isNotEmpty) {
-                  _switchExpenseType(value.first);
-                }
-              },
-              style: const ButtonStyle(
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        // 总金额（大字显示，带动画）
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TweenAnimationBuilder<double>(
-            tween: Tween<double>(begin: 0, end: totalAmount / 100),
-            duration: const Duration(milliseconds: 500),
-            curve: Curves.easeOut,
-            builder: (context, value, child) {
-              return Text(
-                _currencyFormatter.format(value),
-                style: theme.textTheme.headlineLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: _isExpense ? Colors.red.shade700 : Colors.green.shade700,
-                ),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// 月度小结：近5个月柱状图（金额显示在柱子顶部）
-  Widget _buildMonthlyBarChartSection(ThemeData theme, List<MonthlyTotal> monthlyTotals) {
-    if (monthlyTotals.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    final maxAmount = monthlyTotals.fold<int>(0, (max, e) => e.amount > max ? e.amount : max);
-    // 为金额标签预留空间，增加顶部边距
-    final maxY = maxAmount > 0 ? (maxAmount / 100).ceilToDouble() * 1.5 : 100.0;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '月度小结',
-          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 16),
-        SizedBox(
-          height: 250,
-          child: BarChart(
-            BarChartData(
-              alignment: BarChartAlignment.spaceAround,
-              maxY: maxY,
-              titlesData: FlTitlesData(
-                show: true,
-                bottomTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 40,
-                    getTitlesWidget: (value, meta) {
-                      final index = value.toInt();
-                      if (index >= 0 && index < monthlyTotals.length) {
-                        final data = monthlyTotals[index];
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Text(
-                            data.label,
-                            style: theme.textTheme.bodySmall,
-                            textAlign: TextAlign.center,
-                          ),
-                        );
-                      }
-                      return const SizedBox.shrink();
-                    },
-                  ),
-                ),
-                leftTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 50,
-                    interval: maxY / 3,
-                    getTitlesWidget: (value, meta) {
-                      return Text(
-                        value.toStringAsFixed(0),
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-              ),
-              gridData: FlGridData(
-                show: true,
-                drawVerticalLine: false,
-                horizontalInterval: maxY / 3,
-                getDrawingHorizontalLine: (value) => FlLine(
-                  color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-                  strokeWidth: 1,
-                  dashArray: [5, 5],
-                ),
-              ),
-              borderData: FlBorderData(show: false),
-              barGroups: monthlyTotals.asMap().entries.map((entry) {
-                final index = entry.key;
-                final data = entry.value;
-                final isSelectedMonth = data.year == _selectedYear && data.month == _selectedMonth;
-                final barColor = isSelectedMonth
-                    ? const Color(0xFF1976D2)
-                    : const Color(0xFF90CAF9);
-                return BarChartGroupData(
-                  x: index,
-                  barRods: [
-                    BarChartRodData(
-                      toY: data.amount / 100,
-                      color: barColor,
-                      width: 40,
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
-                      // 在柱子顶部显示金额标签
-                      rodStackItems: [],
-                    ),
-                  ],
-                  // 显示柱子顶部的金额标签
-                  showingTooltipIndicators: data.amount > 0 ? [0] : [],
-                );
-              }).toList(),
-              barTouchData: BarTouchData(
-                enabled: true,
-                touchCallback: (event, response) {
-                  if (event.isInterestedForInteractions &&
-                      response?.spot != null) {
-                    final index = response!.spot!.touchedBarGroupIndex;
-                    if (index >= 0 && index < monthlyTotals.length) {
-                      final tappedMonth = monthlyTotals[index];
-                      
-                      // 边界月份自动推进逻辑
-                      int newYear = tappedMonth.year;
-                      int newMonth = tappedMonth.month;
-                      
-                      if (index == 0) {
-                        // 点击最左边的柱子，检查是否有更早的数据
-                        int prevMonth = tappedMonth.month - 1;
-                        int prevYear = tappedMonth.year;
-                        if (prevMonth <= 0) {
-                          prevMonth = 12;
-                          prevYear -= 1;
-                        }
-                        // 如果有更早月份的数据，则使用点击的月份（显示范围会自动往前推）
-                        if (hasDataForMonth(
-                          records: _allRecords,
-                          year: prevYear,
-                          month: prevMonth,
-                          isExpense: _isExpense,
-                        )) {
-                          // 有更早数据，正常跳转到点击的月份
-                          newYear = tappedMonth.year;
-                          newMonth = tappedMonth.month;
-                        }
-                      } else if (index == monthlyTotals.length - 1) {
-                        // 点击最右边的柱子，检查是否有更晚的数据
-                        int nextMonth = tappedMonth.month + 1;
-                        int nextYear = tappedMonth.year;
-                        if (nextMonth > 12) {
-                          nextMonth = 1;
-                          nextYear += 1;
-                        }
-                        // 如果有更晚月份的数据，则跳转到下一个月（显示范围会往后推）
-                        if (hasDataForMonth(
-                          records: _allRecords,
-                          year: nextYear,
-                          month: nextMonth,
-                          isExpense: _isExpense,
-                        )) {
-                          // 有更晚数据，跳转到下一个月
-                          newYear = nextYear;
-                          newMonth = nextMonth;
-                        }
-                      }
-                      
-                      // 跳转到目标月份（带动画）
-                      _switchMonth(newYear, newMonth);
-                    }
-                  }
-                },
-                touchTooltipData: BarTouchTooltipData(
-                  getTooltipColor: (group) => Colors.transparent,
-                  tooltipPadding: EdgeInsets.zero,
-                  tooltipMargin: 0,
-                  getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                    final data = monthlyTotals[groupIndex];
-                    final isSelectedMonth = data.year == _selectedYear && data.month == _selectedMonth;
-                    return BarTooltipItem(
-                      _formatAmountShort(data.amount),
-                      TextStyle(
-                        color: isSelectedMonth
-                            ? theme.colorScheme.primary
-                            : theme.colorScheme.onSurfaceVariant,
-                        fontWeight: isSelectedMonth ? FontWeight.w600 : FontWeight.normal,
-                        fontSize: 11,
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeInOut,
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// 日历视图
-  Widget _buildCalendarSection(ThemeData theme, List<DailyTotal> dailyTotals) {
-    // 构建每日金额映射
-    final dailyMap = <int, int>{};
-    for (final dt in dailyTotals) {
-      dailyMap[dt.day] = dt.amount;
-    }
-
-    // 获取当月第一天是星期几 (0=周日, 1=周一, ..., 6=周六)
-    final firstDayOfMonth = DateTime(_selectedYear, _selectedMonth, 1);
-    final firstWeekday = firstDayOfMonth.weekday % 7; // 转换为周日=0
-    final daysInMonth = DateTime(_selectedYear, _selectedMonth + 1, 0).day;
-
-    // 今天的日期
-    final today = DateTime.now();
-    final isCurrentMonth = today.year == _selectedYear && today.month == _selectedMonth;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // 星期标题行
-        Row(
-          children: ['日', '一', '二', '三', '四', '五', '六']
-              .map((day) => Expanded(
-                    child: Center(
-                      child: Text(
-                        day,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                  ))
-              .toList(),
-        ),
-        const SizedBox(height: 8),
-        // 日历网格
-        _buildCalendarGrid(
-          theme: theme,
-          firstWeekday: firstWeekday,
-          daysInMonth: daysInMonth,
-          dailyMap: dailyMap,
-          isCurrentMonth: isCurrentMonth,
-          today: today.day,
-        ),
-      ],
-    );
-  }
-
-  /// 构建日历网格
-  Widget _buildCalendarGrid({
-    required ThemeData theme,
-    required int firstWeekday,
-    required int daysInMonth,
-    required Map<int, int> dailyMap,
-    required bool isCurrentMonth,
-    required int today,
-  }) {
-    final rows = <Widget>[];
-    var currentDay = 1;
-
-    // 计算需要多少行
-    final totalCells = firstWeekday + daysInMonth;
-    final rowCount = (totalCells / 7).ceil();
-
-    for (var row = 0; row < rowCount; row++) {
-      final cells = <Widget>[];
-      for (var col = 0; col < 7; col++) {
-        final cellIndex = row * 7 + col;
-        if (cellIndex < firstWeekday || currentDay > daysInMonth) {
-          // 空白格子
-          cells.add(const Expanded(child: SizedBox(height: 60)));
-        } else {
-          final day = currentDay;
-          final amount = dailyMap[day] ?? 0;
-          final isToday = isCurrentMonth && day == today;
-          cells.add(
-            Expanded(
-              child: _buildDayCell(
-                theme: theme,
-                day: day,
-                amount: amount,
-                isToday: isToday,
-              ),
-            ),
-          );
-          currentDay++;
-        }
-      }
-      rows.add(
-        Padding(
-          padding: const EdgeInsets.only(bottom: 4),
-          child: Row(children: cells),
-        ),
-      );
-    }
-
-    return Column(children: rows);
-  }
-
-  /// 构建单个日期格子（可点击）
-  Widget _buildDayCell({
-    required ThemeData theme,
-    required int day,
-    required int amount,
-    required bool isToday,
-  }) {
-    final hasAmount = amount > 0;
-    final amountStr = hasAmount ? (amount / 100).toStringAsFixed(2) : '';
-
-    return GestureDetector(
-      onTap: hasAmount ? () => _showDayTransactionsModal(context, day, amount) : null,
-      child: Container(
-        height: 60,
-        margin: const EdgeInsets.all(2),
-        decoration: BoxDecoration(
-          color: isToday
-              ? theme.colorScheme.primaryContainer
-              : hasAmount
-                  ? theme.colorScheme.surfaceContainerHighest
-                  : null,
-          borderRadius: BorderRadius.circular(8),
-          border: isToday
-              ? Border.all(color: theme.colorScheme.primary, width: 2)
-              : null,
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              isToday ? '今天' : '$day',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: isToday ? FontWeight.bold : FontWeight.w500,
-                color: isToday ? theme.colorScheme.primary : null,
-              ),
-            ),
-            if (hasAmount)
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Text(
-                  amountStr,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                    fontSize: 10,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
 
   /// 显示当日交易详情弹窗
   void _showDayTransactionsModal(BuildContext context, int day, int totalAmount) {
@@ -2087,363 +1065,6 @@ class _AnalysisPageState extends State<AnalysisPage> with TickerProviderStateMix
   }
 
   /// 支出分类：饼图（甜甜圈样式，外部标签）
-  Widget _buildPieChartSection(
-    ThemeData theme,
-    List<CategoryTotal> categoryTotals,
-    int totalAmount,
-  ) {
-    if (categoryTotals.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    // 只取前5名，其余合并为"其他"
-    const maxDisplayCount = 5;
-    List<CategoryTotal> displayCategories;
-    if (categoryTotals.length > maxDisplayCount) {
-      displayCategories = categoryTotals.take(maxDisplayCount).toList();
-      // 计算"其他"的总金额和笔数
-      int otherAmount = 0;
-      int otherCount = 0;
-      for (var i = maxDisplayCount; i < categoryTotals.length; i++) {
-        otherAmount += categoryTotals[i].amount;
-        otherCount += categoryTotals[i].count;
-      }
-      if (otherAmount > 0) {
-        displayCategories.add(CategoryTotal(
-          category: '其他(总和)',
-          amount: otherAmount,
-          count: otherCount,
-        ));
-      }
-    } else {
-      displayCategories = categoryTotals;
-    }
-
-    // 确定当前选中的分类索引（默认第一个即最大占比）
-    final selectedIndex = (_touchedPieIndex != null &&
-            _touchedPieIndex! >= 0 &&
-            _touchedPieIndex! < displayCategories.length)
-        ? _touchedPieIndex!
-        : 0;
-
-    final selectedCategory = displayCategories[selectedIndex];
-    final displayPercentage = totalAmount > 0
-        ? (selectedCategory.amount / totalAmount * 100)
-        : 0.0;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          _isExpense ? '支出分类' : '收入分类',
-          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 16),
-        SizedBox(
-          height: 260,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              PieChart(
-                PieChartData(
-                  pieTouchData: PieTouchData(
-                    touchCallback: (event, response) {
-                      if (event.isInterestedForInteractions &&
-                          response?.touchedSection != null) {
-                        final index = response!.touchedSection!.touchedSectionIndex;
-                        if (index >= 0 && index < displayCategories.length) {
-                          setState(() {
-                            _touchedPieIndex = index;
-                          });
-                        }
-                      }
-                    },
-                  ),
-                  sectionsSpace: 2,
-                  centerSpaceRadius: 50,
-                  sections: displayCategories.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final data = entry.value;
-                    final isSelected = index == selectedIndex;
-                    final percentage = totalAmount > 0
-                        ? (data.amount / totalAmount * 100)
-                        : 0.0;
-                    final color = kCategoryColors[index % kCategoryColors.length];
-                    
-                    // 是否有用户主动选中（非默认状态）
-                    final hasUserSelection = _touchedPieIndex != null;
-                    
-                    // 标签显示逻辑：
-                    // - 有选中时：只显示选中的那个标签
-                    // - 无选中时（默认）：显示占比 >= 5% 的标签
-                    final shouldShowBadge = hasUserSelection
-                        ? isSelected
-                        : percentage >= 5;
-
-                    return PieChartSectionData(
-                      color: color,
-                      value: data.amount.toDouble(),
-                      title: '',
-                      radius: isSelected ? 40 : 32,
-                      // 外部标签：带颜色边框的方框
-                      badgeWidget: shouldShowBadge
-                          ? _buildCategoryBadge(
-                              theme: theme,
-                              category: data.category,
-                              percentage: percentage,
-                              color: color,
-                              isSelected: isSelected,
-                            )
-                          : null,
-                      badgePositionPercentageOffset: 1.15,
-                    );
-                  }).toList(),
-                ),
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOut,
-              ),
-              // 中间显示选中分类信息
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                child: Column(
-                  key: ValueKey('${selectedCategory.category}-${selectedCategory.amount}'),
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      selectedCategory.category,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: theme.colorScheme.onSurface,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${displayPercentage.toStringAsFixed(1)}%',
-                      style: theme.textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                    Text(
-                      _formatAmountShort(selectedCategory.amount),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        // 图例
-        const SizedBox(height: 12),
-        _buildPieLegend(theme, displayCategories, totalAmount, selectedIndex),
-      ],
-    );
-  }
-
-  /// 构建分类标签（带颜色边框的方框）
-  Widget _buildCategoryBadge({
-    required ThemeData theme,
-    required String category,
-    required double percentage,
-    required Color color,
-    required bool isSelected,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(
-          color: color,
-          width: isSelected ? 2 : 1,
-        ),
-        boxShadow: isSelected
-            ? [
-                BoxShadow(
-                  color: color.withValues(alpha: 0.3),
-                  blurRadius: 4,
-                  offset: const Offset(0, 1),
-                ),
-              ]
-            : null,
-      ),
-      child: Text(
-        '$category ${percentage.toStringAsFixed(0)}%',
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: color,
-          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-          fontSize: 10,
-        ),
-      ),
-    );
-  }
-
-  /// 构建饼图图例
-  Widget _buildPieLegend(
-    ThemeData theme,
-    List<CategoryTotal> categories,
-    int totalAmount,
-    int selectedIndex,
-  ) {
-    return Wrap(
-      spacing: 16,
-      runSpacing: 8,
-      children: categories.asMap().entries.map((entry) {
-        final index = entry.key;
-        final data = entry.value;
-        final color = kCategoryColors[index % kCategoryColors.length];
-        final percentage = totalAmount > 0
-            ? (data.amount / totalAmount * 100)
-            : 0.0;
-        final isSelected = index == selectedIndex;
-
-        return GestureDetector(
-          onTap: () {
-            setState(() {
-              _touchedPieIndex = index;
-            });
-          },
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                '${data.category} ${percentage.toStringAsFixed(1)}%',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: isSelected
-                      ? theme.colorScheme.primary
-                      : theme.colorScheme.onSurfaceVariant,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                ),
-              ),
-            ],
-          ),
-        );
-      }).toList(),
-    );
-  }
-
-  /// 支出分类排行榜（支付宝风格）
-  Widget _buildCategoryRankingSection(
-    ThemeData theme,
-    List<CategoryTotal> categoryTotals,
-    int totalAmount,
-  ) {
-    if (categoryTotals.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 40),
-        child: Center(
-          child: Text(
-            '暂无数据',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ...categoryTotals.asMap().entries.map((entry) {
-          final index = entry.key;
-          final data = entry.value;
-          final percentage = totalAmount > 0 ? (data.amount / totalAmount * 100) : 0.0;
-
-          return _buildCategoryItem(
-            theme: theme,
-            rank: index + 1,
-            category: data.category,
-            percentage: percentage,
-            amount: data.amount,
-            count: data.count,
-            onTap: () => _showCategoryTransactionsModal(
-              context,
-              data.category,
-              data.amount,
-              data.count,
-            ),
-          );
-        }),
-      ],
-    );
-  }
-
-  /// 构建单个分类项（支付宝风格：序号.名称 百分比 | 金额(笔数)）
-  Widget _buildCategoryItem({
-    required ThemeData theme,
-    required int rank,
-    required String category,
-    required double percentage,
-    required int amount,
-    required int count,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 20),
-        child: Row(
-          children: [
-            // 左侧：序号 + 名称 + 百分比
-            Expanded(
-              child: Text.rich(
-                TextSpan(
-                  children: [
-                    TextSpan(
-                      text: '$rank.',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    TextSpan(
-                      text: '$category ',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    TextSpan(
-                      text: '${percentage.toStringAsFixed(1)}%',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            // 右侧：金额 + 笔数
-            Text(
-              '${_currencyFormatter.format(amount / 100)}($count笔)',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(width: 4),
-            Icon(
-              Icons.chevron_right,
-              size: 20,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   /// 显示分类交易详情弹窗
   void _showCategoryTransactionsModal(

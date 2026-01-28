@@ -54,7 +54,7 @@ class CategoryGridItem extends StatelessWidget {
               Icon(
                 icon,
                 size: 24,
-                color: isSelected ? displayColor : theme.colorScheme.onSurfaceVariant,
+                color: (isSelected || color != null) ? displayColor : theme.colorScheme.onSurfaceVariant,
               ),
               const SizedBox(height: 6),
             ],
@@ -64,7 +64,7 @@ class CategoryGridItem extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.bodySmall?.copyWith(
-                color: isSelected ? displayColor : theme.colorScheme.onSurface,
+                color: (isSelected || color != null) ? displayColor : theme.colorScheme.onSurface,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
               ),
             ),
