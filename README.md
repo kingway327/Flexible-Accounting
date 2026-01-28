@@ -17,7 +17,8 @@
 
 - 🛠️ **强大的批量编辑**：支持多选账单批量修改分类、添加备注，极大提升整理效率。<img width="496" height="1016" alt="image" src="https://github.com/user-attachments/assets/d7a3dd66-d4e4-459b-905f-f27c24aeece7" />
 
-- 🎨 **现代化 UI 设计**：采用 Material 3 设计语言，支持网格化图标视图，操作直观且视觉精美。
+- 🎨 **现代化 UI 设计**：采用 Material 3 设计语言，支持网格化图标视图，操作直观且视觉精美。<img width="486" height="893" alt="image" src="https://github.com/user-attachments/assets/19bc8bef-34c6-4ef7-a305-94a74bf62a00" />
+
 - 📊 **多维筛选过滤**：基于交易类型、分类、分组及搜索详情的深度过滤系统。
 
 ---
