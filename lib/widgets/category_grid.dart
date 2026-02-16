@@ -39,10 +39,11 @@ class CategoryGridItem extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
         decoration: BoxDecoration(
           color: isSelected
-              ? displayColor.withOpacity(0.15)
+              ? displayColor.withValues(alpha: 0.15)
               : theme.colorScheme.surfaceContainerHighest,
           border: Border.all(
-            color: isSelected ? displayColor : displayColor.withOpacity(0.3),
+            color:
+                isSelected ? displayColor : displayColor.withValues(alpha: 0.3),
             width: isSelected ? 2 : 1,
           ),
           borderRadius: BorderRadius.circular(12),
@@ -54,7 +55,9 @@ class CategoryGridItem extends StatelessWidget {
               Icon(
                 icon,
                 size: 24,
-                color: (isSelected || color != null) ? displayColor : theme.colorScheme.onSurfaceVariant,
+                color: (isSelected || color != null)
+                    ? displayColor
+                    : theme.colorScheme.onSurfaceVariant,
               ),
               const SizedBox(height: 6),
             ],
@@ -64,7 +67,9 @@ class CategoryGridItem extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.bodySmall?.copyWith(
-                color: (isSelected || color != null) ? displayColor : theme.colorScheme.onSurface,
+                color: (isSelected || color != null)
+                    ? displayColor
+                    : theme.colorScheme.onSurface,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
               ),
             ),

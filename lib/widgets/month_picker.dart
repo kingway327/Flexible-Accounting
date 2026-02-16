@@ -88,19 +88,23 @@ void showMonthYearPicker(
   int selectedMonth = initialMonth;
   const int startYear = 2000;
   const int endYear = 2030;
+  final yearHasDataCache = <int, bool>{};
 
-  // 预计算每年有数据的月份数
-  Map<int, int> yearDataMonthCount = {};
-  if (hasDataForYearMonth != null) {
-    for (int year = startYear; year <= endYear; year++) {
-      int count = 0;
-      for (int month = 1; month <= 12; month++) {
-        if (hasDataForYearMonth(year, month)) {
-          count++;
-        }
-      }
-      yearDataMonthCount[year] = count;
+  bool hasDataForYear(int year) {
+    if (hasDataForYearMonth == null) {
+      return true;
     }
+    if (yearHasDataCache.containsKey(year)) {
+      return yearHasDataCache[year]!;
+    }
+    for (int month = 1; month <= 12; month++) {
+      if (hasDataForYearMonth(year, month)) {
+        yearHasDataCache[year] = true;
+        return true;
+      }
+    }
+    yearHasDataCache[year] = false;
+    return false;
   }
 
   showModalBottomSheet(
@@ -155,8 +159,7 @@ void showMonthYearPicker(
                           },
                           itemBuilder: (index) {
                             final year = startYear + index;
-                            final hasData = hasDataForYearMonth == null ||
-                                (yearDataMonthCount[year] ?? 0) > 0;
+                            final hasData = hasDataForYear(year);
                             return buildPickerItem(
                               text: '$year年',
                               hasData: hasData,

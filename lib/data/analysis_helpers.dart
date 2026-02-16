@@ -6,34 +6,34 @@ import '../models/models.dart';
 /// 使用按年月索引的数据结构，将 O(n) 查询降为 O(1)
 class AnalysisCache {
   AnalysisCache._();
-  
+
   static final AnalysisCache instance = AnalysisCache._();
-  
+
   // 缓存版本号，用于判断是否需要重建
   int _version = 0;
-  
+
   // 按年月索引的记录：year -> month -> records
   final Map<int, Map<int, List<TransactionRecord>>> _monthlyIndex = {};
-  
+
   // 按年索引的记录：year -> records
   final Map<int, List<TransactionRecord>> _yearlyIndex = {};
-  
+
   // 按日期索引：'yyyy-MM-dd' -> records
   final Map<String, List<TransactionRecord>> _dailyIndex = {};
-  
+
   // 数据范围缓存
   ({int minYear, int minMonth, int maxYear, int maxMonth})? _expenseRange;
   ({int minYear, int minMonth, int maxYear, int maxMonth})? _incomeRange;
-  
+
   // 月度汇总缓存：'year-month-type' -> total
   final Map<String, int> _monthlyTotalCache = {};
-  
+
   // 年度汇总缓存：'year-type' -> total
   final Map<String, int> _yearlyTotalCache = {};
-  
+
   /// 获取当前缓存版本
   int get version => _version;
-  
+
   /// 重建缓存（当数据变化时调用）
   void rebuild(List<TransactionRecord> records) {
     _version++;
@@ -44,60 +44,78 @@ class AnalysisCache {
     _incomeRange = null;
     _monthlyTotalCache.clear();
     _yearlyTotalCache.clear();
-    
+
     int? expMinYear, expMinMonth, expMaxYear, expMaxMonth;
     int? incMinYear, incMinMonth, incMaxYear, incMaxMonth;
-    
+
     for (final record in records) {
       final date = DateTime.fromMillisecondsSinceEpoch(record.timestamp);
       final year = date.year;
       final month = date.month;
       final day = date.day;
-      
+
       // 按年月索引
       _monthlyIndex.putIfAbsent(year, () => {});
       _monthlyIndex[year]!.putIfAbsent(month, () => []);
       _monthlyIndex[year]![month]!.add(record);
-      
+
       // 按年索引
       _yearlyIndex.putIfAbsent(year, () => []);
       _yearlyIndex[year]!.add(record);
-      
+
       // 按日期索引
       final dateKey = '$year-$month-$day';
       _dailyIndex.putIfAbsent(dateKey, () => []);
       _dailyIndex[dateKey]!.add(record);
-      
+
       // 更新数据范围
       if (record.type == TransactionType.expense) {
-        if (expMinYear == null || year < expMinYear || (year == expMinYear && month < expMinMonth!)) {
+        if (expMinYear == null ||
+            year < expMinYear ||
+            (year == expMinYear && month < expMinMonth!)) {
           expMinYear = year;
           expMinMonth = month;
         }
-        if (expMaxYear == null || year > expMaxYear || (year == expMaxYear && month > expMaxMonth!)) {
+        if (expMaxYear == null ||
+            year > expMaxYear ||
+            (year == expMaxYear && month > expMaxMonth!)) {
           expMaxYear = year;
           expMaxMonth = month;
         }
       } else {
-        if (incMinYear == null || year < incMinYear || (year == incMinYear && month < incMinMonth!)) {
+        if (incMinYear == null ||
+            year < incMinYear ||
+            (year == incMinYear && month < incMinMonth!)) {
           incMinYear = year;
           incMinMonth = month;
         }
-        if (incMaxYear == null || year > incMaxYear || (year == incMaxYear && month > incMaxMonth!)) {
+        if (incMaxYear == null ||
+            year > incMaxYear ||
+            (year == incMaxYear && month > incMaxMonth!)) {
           incMaxYear = year;
           incMaxMonth = month;
         }
       }
     }
-    
+
     if (expMinYear != null) {
-      _expenseRange = (minYear: expMinYear, minMonth: expMinMonth!, maxYear: expMaxYear!, maxMonth: expMaxMonth!);
+      _expenseRange = (
+        minYear: expMinYear,
+        minMonth: expMinMonth!,
+        maxYear: expMaxYear!,
+        maxMonth: expMaxMonth!
+      );
     }
     if (incMinYear != null) {
-      _incomeRange = (minYear: incMinYear, minMonth: incMinMonth!, maxYear: incMaxYear!, maxMonth: incMaxMonth!);
+      _incomeRange = (
+        minYear: incMinYear,
+        minMonth: incMinMonth!,
+        maxYear: incMaxYear!,
+        maxMonth: incMaxMonth!
+      );
     }
   }
-  
+
   /// 清空缓存
   void clear() {
     _version++;
@@ -109,35 +127,37 @@ class AnalysisCache {
     _monthlyTotalCache.clear();
     _yearlyTotalCache.clear();
   }
-  
+
   /// 获取指定月份的记录（O(1)查询）
   List<TransactionRecord> getMonthlyRecords(int year, int month) {
     return _monthlyIndex[year]?[month] ?? [];
   }
-  
+
   /// 获取指定年份的记录（O(1)查询）
   List<TransactionRecord> getYearlyRecords(int year) {
     return _yearlyIndex[year] ?? [];
   }
-  
+
   /// 获取指定日期的记录（O(1)查询）
   List<TransactionRecord> getDailyRecords(int year, int month, int day) {
     return _dailyIndex['$year-$month-$day'] ?? [];
   }
-  
+
   /// 获取数据月份范围（O(1)查询）
-  ({int minYear, int minMonth, int maxYear, int maxMonth})? getDataRange(bool isExpense) {
+  ({int minYear, int minMonth, int maxYear, int maxMonth})? getDataRange(
+      bool isExpense) {
     return isExpense ? _expenseRange : _incomeRange;
   }
-  
+
   /// 获取月度总金额（带缓存）
   int getMonthlyTotal(int year, int month, bool isExpense) {
     final key = '$year-$month-${isExpense ? 'exp' : 'inc'}';
     if (_monthlyTotalCache.containsKey(key)) {
       return _monthlyTotalCache[key]!;
     }
-    
-    final targetType = isExpense ? TransactionType.expense : TransactionType.income;
+
+    final targetType =
+        isExpense ? TransactionType.expense : TransactionType.income;
     final records = getMonthlyRecords(year, month);
     var total = 0;
     for (final record in records) {
@@ -145,19 +165,20 @@ class AnalysisCache {
         total += record.amount;
       }
     }
-    
+
     _monthlyTotalCache[key] = total;
     return total;
   }
-  
+
   /// 获取年度总金额（带缓存）
   int getYearlyTotal(int year, bool isExpense) {
     final key = '$year-${isExpense ? 'exp' : 'inc'}';
     if (_yearlyTotalCache.containsKey(key)) {
       return _yearlyTotalCache[key]!;
     }
-    
-    final targetType = isExpense ? TransactionType.expense : TransactionType.income;
+
+    final targetType =
+        isExpense ? TransactionType.expense : TransactionType.income;
     final records = getYearlyRecords(year);
     var total = 0;
     for (final record in records) {
@@ -165,21 +186,23 @@ class AnalysisCache {
         total += record.amount;
       }
     }
-    
+
     _yearlyTotalCache[key] = total;
     return total;
   }
-  
+
   /// 检查指定月份是否有数据（O(1)查询）
   bool hasMonthlyData(int year, int month, bool isExpense) {
-    final targetType = isExpense ? TransactionType.expense : TransactionType.income;
+    final targetType =
+        isExpense ? TransactionType.expense : TransactionType.income;
     final records = getMonthlyRecords(year, month);
     return records.any((r) => r.type == targetType);
   }
-  
+
   /// 检查指定年份是否有数据（O(1)查询）
   bool hasYearlyData(int year, bool isExpense) {
-    final targetType = isExpense ? TransactionType.expense : TransactionType.income;
+    final targetType =
+        isExpense ? TransactionType.expense : TransactionType.income;
     final records = getYearlyRecords(year);
     return records.any((r) => r.type == targetType);
   }
@@ -230,11 +253,12 @@ List<DailyTotal> getDailyTotals({
   // 优化：使用缓存获取当月记录
   final cache = AnalysisCache.instance;
   final monthlyRecords = cache.getMonthlyRecords(year, month);
-  
+
   // 如果缓存为空，回退到原始方式
   final targetRecords = monthlyRecords.isNotEmpty ? monthlyRecords : records;
-  
-  final targetType = isExpense ? TransactionType.expense : TransactionType.income;
+
+  final targetType =
+      isExpense ? TransactionType.expense : TransactionType.income;
   for (final record in targetRecords) {
     if (record.type != targetType) continue;
 
@@ -268,7 +292,8 @@ List<CategoryTotal> getCategoryTotals({
   final monthlyRecords = cache.getMonthlyRecords(year, month);
   final targetRecords = monthlyRecords.isNotEmpty ? monthlyRecords : records;
 
-  final targetType = isExpense ? TransactionType.expense : TransactionType.income;
+  final targetType =
+      isExpense ? TransactionType.expense : TransactionType.income;
   for (final record in targetRecords) {
     if (record.type != targetType) continue;
 
@@ -276,7 +301,8 @@ List<CategoryTotal> getCategoryTotals({
     if (date.year != year || date.month != month) continue;
 
     // 使用 category 字段，如果为空则使用 "其他"
-    final category = (record.category?.isNotEmpty == true) ? record.category! : '其他';
+    final category =
+        (record.category?.isNotEmpty == true) ? record.category! : '其他';
 
     if (!categoryMap.containsKey(category)) {
       categoryMap[category] = _CategoryAccumulator();
@@ -307,13 +333,14 @@ int getMonthlyTotal({
   // 优化：尝试使用缓存
   final cache = AnalysisCache.instance;
   final monthlyRecords = cache.getMonthlyRecords(year, month);
-  
+
   if (monthlyRecords.isNotEmpty) {
     return cache.getMonthlyTotal(year, month, isExpense);
   }
-  
+
   // 回退到原始方式
-  final targetType = isExpense ? TransactionType.expense : TransactionType.income;
+  final targetType =
+      isExpense ? TransactionType.expense : TransactionType.income;
   var total = 0;
 
   for (final record in records) {
@@ -369,11 +396,12 @@ List<MonthlyTotal> getRecentMonthlyTotals({
   int monthCount = 5,
 }) {
   final results = <MonthlyTotal>[];
-  final targetType = isExpense ? TransactionType.expense : TransactionType.income;
+  final targetType =
+      isExpense ? TransactionType.expense : TransactionType.income;
 
   // 获取数据的月份范围
   final dataRange = getDataMonthRange(records: records, isExpense: isExpense);
-  
+
   // 计算选中月份之后有多少个月有数据
   int monthsAfterWithData = 0;
   if (dataRange != null) {
@@ -383,7 +411,7 @@ List<MonthlyTotal> getRecentMonthlyTotals({
     monthsAfterWithData = maxMonthValue - selectedMonthValue;
     if (monthsAfterWithData < 0) monthsAfterWithData = 0;
   }
-  
+
   // 计算选中月份之前有多少个月有数据
   int monthsBeforeWithData = 0;
   if (dataRange != null) {
@@ -392,14 +420,14 @@ List<MonthlyTotal> getRecentMonthlyTotals({
     monthsBeforeWithData = selectedMonthValue - minMonthValue;
     if (monthsBeforeWithData < 0) monthsBeforeWithData = 0;
   }
-  
+
   // 决定选中月份在5个柱子中的位置（0=最左，4=最右，2=居中）
   // 默认居中，但根据数据边界调整
   int selectedPosition = 2; // 默认居中
-  
+
   final maxRightPosition = monthCount - 1; // 4
   final maxRightOffset = maxRightPosition - selectedPosition; // 2 (居中时右边有2个)
-  
+
   if (monthsAfterWithData < maxRightOffset) {
     // 右边数据不够，选中月份需要往右移
     selectedPosition = monthCount - 1 - monthsAfterWithData;
@@ -408,7 +436,7 @@ List<MonthlyTotal> getRecentMonthlyTotals({
     // 左边数据不够，选中月份需要往左移
     selectedPosition = monthsBeforeWithData;
   }
-  
+
   // 确保 selectedPosition 在有效范围内
   if (selectedPosition < 0) selectedPosition = 0;
   if (selectedPosition > maxRightPosition) selectedPosition = maxRightPosition;
@@ -486,19 +514,20 @@ List<MonthlyTotal> getRecentMonthlyTotals({
   if (cachedRange != null) {
     return cachedRange;
   }
-  
+
   // 回退到原始方式
-  final targetType = isExpense ? TransactionType.expense : TransactionType.income;
-  
+  final targetType =
+      isExpense ? TransactionType.expense : TransactionType.income;
+
   int? minYear, minMonth, maxYear, maxMonth;
-  
+
   for (final record in records) {
     if (record.type != targetType) continue;
-    
+
     final date = DateTime.fromMillisecondsSinceEpoch(record.timestamp);
     final y = date.year;
     final m = date.month;
-    
+
     if (minYear == null || y < minYear || (y == minYear && m < minMonth!)) {
       minYear = y;
       minMonth = m;
@@ -508,10 +537,15 @@ List<MonthlyTotal> getRecentMonthlyTotals({
       maxMonth = m;
     }
   }
-  
+
   if (minYear == null) return null;
-  
-  return (minYear: minYear, minMonth: minMonth!, maxYear: maxYear!, maxMonth: maxMonth!);
+
+  return (
+    minYear: minYear,
+    minMonth: minMonth!,
+    maxYear: maxYear!,
+    maxMonth: maxMonth!
+  );
 }
 
 /// 检查指定月份是否有数据
@@ -525,23 +559,29 @@ bool hasDataForMonth({
   // 优化：尝试使用缓存
   final cache = AnalysisCache.instance;
   final monthlyRecords = cache.getMonthlyRecords(year, month);
-  
+
   if (monthlyRecords.isNotEmpty) {
     return cache.hasMonthlyData(year, month, isExpense);
   }
-  
+
+  // 缓存已建立且该月无记录时，直接返回 false，避免回退全量扫描
+  if (cache.version > 0) {
+    return false;
+  }
+
   // 回退到原始方式
-  final targetType = isExpense ? TransactionType.expense : TransactionType.income;
-  
+  final targetType =
+      isExpense ? TransactionType.expense : TransactionType.income;
+
   for (final record in records) {
     if (record.type != targetType) continue;
-    
+
     final date = DateTime.fromMillisecondsSinceEpoch(record.timestamp);
     if (date.year == year && date.month == month) {
       return true;
     }
   }
-  
+
   return false;
 }
 
@@ -555,11 +595,16 @@ bool hasDataForMonthAny({
   // 优化：尝试使用缓存
   final cache = AnalysisCache.instance;
   final monthlyRecords = cache.getMonthlyRecords(year, month);
-  
+
   if (monthlyRecords.isNotEmpty) {
     return true;
   }
-  
+
+  // 缓存已建立且该月无记录时，直接返回 false，避免回退全量扫描
+  if (cache.version > 0) {
+    return false;
+  }
+
   // 回退到原始方式
   for (final record in records) {
     final date = DateTime.fromMillisecondsSinceEpoch(record.timestamp);
@@ -567,7 +612,7 @@ bool hasDataForMonthAny({
       return true;
     }
   }
-  
+
   return false;
 }
 
@@ -606,22 +651,24 @@ List<WeeklyDailyTotal> getWeeklyDailyTotals({
   required bool isExpense,
   int weekOffset = 0,
 }) {
-  final targetType = isExpense ? TransactionType.expense : TransactionType.income;
+  final targetType =
+      isExpense ? TransactionType.expense : TransactionType.income;
   final today = DateTime.now();
-  
+
   // 计算本周周一
   final daysSinceMonday = (referenceDate.weekday - 1);
-  final monday = DateTime(referenceDate.year, referenceDate.month, referenceDate.day - daysSinceMonday);
-  
+  final monday = DateTime(referenceDate.year, referenceDate.month,
+      referenceDate.day - daysSinceMonday);
+
   // 应用周偏移
   final targetMonday = monday.add(Duration(days: weekOffset * 7));
-  
+
   final results = <WeeklyDailyTotal>[];
-  
+
   for (int i = 0; i < 7; i++) {
     final date = targetMonday.add(Duration(days: i));
     final dayOfWeek = i + 1; // 1=周一
-    
+
     // 统计该日金额
     int amount = 0;
     for (final record in records) {
@@ -633,15 +680,17 @@ List<WeeklyDailyTotal> getWeeklyDailyTotals({
         amount += record.amount;
       }
     }
-    
+
     results.add(WeeklyDailyTotal(
       date: date,
       dayOfWeek: dayOfWeek,
       amount: amount,
-      isToday: date.year == today.year && date.month == today.month && date.day == today.day,
+      isToday: date.year == today.year &&
+          date.month == today.month &&
+          date.day == today.day,
     ));
   }
-  
+
   return results;
 }
 
@@ -664,10 +713,11 @@ int getWeeklyTotal({
 /// 获取周的日期范围字符串
 String getWeekRangeString(DateTime referenceDate, {int weekOffset = 0}) {
   final daysSinceMonday = (referenceDate.weekday - 1);
-  final monday = DateTime(referenceDate.year, referenceDate.month, referenceDate.day - daysSinceMonday);
+  final monday = DateTime(referenceDate.year, referenceDate.month,
+      referenceDate.day - daysSinceMonday);
   final targetMonday = monday.add(Duration(days: weekOffset * 7));
   final targetSunday = targetMonday.add(const Duration(days: 6));
-  
+
   return '${targetMonday.month}.${targetMonday.day} - ${targetSunday.month}.${targetSunday.day}';
 }
 
@@ -678,32 +728,37 @@ List<CategoryTotal> getWeeklyCategoryTotals({
   required bool isExpense,
   int weekOffset = 0,
 }) {
-  final targetType = isExpense ? TransactionType.expense : TransactionType.income;
+  final targetType =
+      isExpense ? TransactionType.expense : TransactionType.income;
   final categoryMap = <String, _CategoryAccumulator>{};
-  
+
   // 计算目标周的周一和周日
   final daysSinceMonday = (referenceDate.weekday - 1);
-  final monday = DateTime(referenceDate.year, referenceDate.month, referenceDate.day - daysSinceMonday);
+  final monday = DateTime(referenceDate.year, referenceDate.month,
+      referenceDate.day - daysSinceMonday);
   final targetMonday = monday.add(Duration(days: weekOffset * 7));
   final targetSunday = targetMonday.add(const Duration(days: 6));
-  
+
   for (final record in records) {
     if (record.type != targetType) continue;
-    
+
     final date = DateTime.fromMillisecondsSinceEpoch(record.timestamp);
     final dateOnly = DateTime(date.year, date.month, date.day);
-    
-    if (dateOnly.isBefore(targetMonday) || dateOnly.isAfter(targetSunday)) continue;
-    
-    final category = (record.category?.isNotEmpty == true) ? record.category! : '其他';
-    
+
+    if (dateOnly.isBefore(targetMonday) || dateOnly.isAfter(targetSunday)) {
+      continue;
+    }
+
+    final category =
+        (record.category?.isNotEmpty == true) ? record.category! : '其他';
+
     if (!categoryMap.containsKey(category)) {
       categoryMap[category] = _CategoryAccumulator();
     }
     categoryMap[category]!.amount += record.amount;
     categoryMap[category]!.count += 1;
   }
-  
+
   return categoryMap.entries
       .map((e) => CategoryTotal(
             category: e.key,
@@ -737,20 +792,34 @@ List<YearlyMonthTotal> getYearlyMonthlyTotals({
   required bool isExpense,
   int? currentMonth, // 当前选中的月份
 }) {
-  final targetType = isExpense ? TransactionType.expense : TransactionType.income;
   final now = DateTime.now();
   final selectedMonth = currentMonth ?? (year == now.year ? now.month : 12);
-  
+
   final cache = AnalysisCache.instance;
   final results = <YearlyMonthTotal>[];
-  
+
+  if (cache.version > 0) {
+    for (int month = 1; month <= 12; month++) {
+      results.add(
+        YearlyMonthTotal(
+          month: month,
+          amount: cache.getMonthlyTotal(year, month, isExpense),
+          isCurrentMonth: month == selectedMonth,
+        ),
+      );
+    }
+    return results;
+  }
+
+  final targetType =
+      isExpense ? TransactionType.expense : TransactionType.income;
   for (int month = 1; month <= 12; month++) {
     int amount = 0;
-    
+
     // 优化：使用缓存获取当月记录
     final monthlyRecords = cache.getMonthlyRecords(year, month);
     final targetRecords = monthlyRecords.isNotEmpty ? monthlyRecords : records;
-    
+
     for (final record in targetRecords) {
       if (record.type != targetType) continue;
       final date = DateTime.fromMillisecondsSinceEpoch(record.timestamp);
@@ -758,14 +827,14 @@ List<YearlyMonthTotal> getYearlyMonthlyTotals({
         amount += record.amount;
       }
     }
-    
+
     results.add(YearlyMonthTotal(
       month: month,
       amount: amount,
       isCurrentMonth: month == selectedMonth,
     ));
   }
-  
+
   return results;
 }
 
@@ -779,15 +848,16 @@ int getYearlyTotal({
   // 优化：尝试使用缓存
   final cache = AnalysisCache.instance;
   final yearlyRecords = cache.getYearlyRecords(year);
-  
+
   if (yearlyRecords.isNotEmpty) {
     return cache.getYearlyTotal(year, isExpense);
   }
-  
+
   // 回退到原始方式
-  final targetType = isExpense ? TransactionType.expense : TransactionType.income;
+  final targetType =
+      isExpense ? TransactionType.expense : TransactionType.income;
   int total = 0;
-  
+
   for (final record in records) {
     if (record.type != targetType) continue;
     final date = DateTime.fromMillisecondsSinceEpoch(record.timestamp);
@@ -795,7 +865,7 @@ int getYearlyTotal({
       total += record.amount;
     }
   }
-  
+
   return total;
 }
 
@@ -810,11 +880,11 @@ int getYearlyMonthlyAverage({
     year: year,
     isExpense: isExpense,
   );
-  
+
   // 只计算有数据的月份
   final monthsWithData = monthlyTotals.where((e) => e.amount > 0).toList();
   if (monthsWithData.isEmpty) return 0;
-  
+
   final total = monthsWithData.fold(0, (sum, e) => sum + e.amount);
   return total ~/ monthsWithData.length;
 }
@@ -826,29 +896,31 @@ List<CategoryTotal> getYearlyCategoryTotals({
   required int year,
   required bool isExpense,
 }) {
-  final targetType = isExpense ? TransactionType.expense : TransactionType.income;
+  final targetType =
+      isExpense ? TransactionType.expense : TransactionType.income;
   final categoryMap = <String, _CategoryAccumulator>{};
-  
+
   // 优化：使用缓存获取当年记录
   final cache = AnalysisCache.instance;
   final yearlyRecords = cache.getYearlyRecords(year);
   final targetRecords = yearlyRecords.isNotEmpty ? yearlyRecords : records;
-  
+
   for (final record in targetRecords) {
     if (record.type != targetType) continue;
-    
+
     final date = DateTime.fromMillisecondsSinceEpoch(record.timestamp);
     if (date.year != year) continue;
-    
-    final category = (record.category?.isNotEmpty == true) ? record.category! : '其他';
-    
+
+    final category =
+        (record.category?.isNotEmpty == true) ? record.category! : '其他';
+
     if (!categoryMap.containsKey(category)) {
       categoryMap[category] = _CategoryAccumulator();
     }
     categoryMap[category]!.amount += record.amount;
     categoryMap[category]!.count += 1;
   }
-  
+
   return categoryMap.entries
       .map((e) => CategoryTotal(
             category: e.key,
@@ -869,14 +941,20 @@ bool hasDataForYear({
   // 优化：尝试使用缓存
   final cache = AnalysisCache.instance;
   final yearlyRecords = cache.getYearlyRecords(year);
-  
+
   if (yearlyRecords.isNotEmpty) {
     return cache.hasYearlyData(year, isExpense);
   }
-  
+
+  // 缓存已建立且该年无记录时，直接返回 false，避免回退全量扫描
+  if (cache.version > 0) {
+    return false;
+  }
+
   // 回退到原始方式
-  final targetType = isExpense ? TransactionType.expense : TransactionType.income;
-  
+  final targetType =
+      isExpense ? TransactionType.expense : TransactionType.income;
+
   for (final record in records) {
     if (record.type != targetType) continue;
     final date = DateTime.fromMillisecondsSinceEpoch(record.timestamp);
@@ -884,7 +962,7 @@ bool hasDataForYear({
       return true;
     }
   }
-  
+
   return false;
 }
 
@@ -897,11 +975,16 @@ bool hasDataForYearAny({
   // 优化：尝试使用缓存
   final cache = AnalysisCache.instance;
   final yearlyRecords = cache.getYearlyRecords(year);
-  
+
   if (yearlyRecords.isNotEmpty) {
     return true;
   }
-  
+
+  // 缓存已建立且该年无记录时，直接返回 false，避免回退全量扫描
+  if (cache.version > 0) {
+    return false;
+  }
+
   // 回退到原始方式
   for (final record in records) {
     final date = DateTime.fromMillisecondsSinceEpoch(record.timestamp);
@@ -909,7 +992,7 @@ bool hasDataForYearAny({
       return true;
     }
   }
-  
+
   return false;
 }
 

@@ -1,10 +1,9 @@
-import 'dart:typed_data';
+import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 
-import '../constants/categories.dart';
 import '../data/analysis_helpers.dart';
 import '../data/database_helper.dart';
 import '../data/export_service.dart';
@@ -21,11 +20,13 @@ enum TypeFilter { all, expense, income, notCounted }
 class FinanceProvider extends ChangeNotifier {
   final _db = DatabaseHelper.instance;
   final _export = ExportService.instance;
-  final _currencyFormatter = NumberFormat.currency(symbol: '¥', decimalDigits: 2);
+  final _currencyFormatter =
+      NumberFormat.currency(symbol: '¥', decimalDigits: 2);
 
   List<TransactionRecord> _records = [];
   Map<String, int> _summary = {'expense': 0, 'income': 0};
   bool _loading = false;
+  bool _initializing = true;
   SourceFilter _currentFilter = SourceFilter.all;
   int _selectedYear = DateTime.now().year;
   int _selectedMonth = DateTime.now().month;
@@ -33,6 +34,7 @@ class FinanceProvider extends ChangeNotifier {
 
   // 搜索和高级筛选
   String _searchQuery = '';
+  Timer? _searchDebounceTimer;
   TypeFilter _typeFilter = TypeFilter.all;
   Set<String> _selectedCategories = {};
 
@@ -58,12 +60,17 @@ class FinanceProvider extends ChangeNotifier {
   // ==================== 缓存优化 ====================
   bool _filterCacheDirty = true;
   List<TransactionRecord>? _filteredRecordsCache;
+  List<TransactionRecord>? _dbFilteredRecords;
   String? _snackBarMessage;
 
   /// 获取筛选后的记录（带缓存）
   List<TransactionRecord> get records {
     if (_filterCacheDirty || _filteredRecordsCache == null) {
-      _filteredRecordsCache = _applyFilter(_records);
+      if (_dbFilteredRecords != null) {
+        _filteredRecordsCache = _dbFilteredRecords!;
+      } else {
+        _filteredRecordsCache = _applyFilter(_records);
+      }
       _summary = _calculateSummary(_filteredRecordsCache!);
       _filterCacheDirty = false;
     }
@@ -75,6 +82,61 @@ class FinanceProvider extends ChangeNotifier {
     _filterCacheDirty = true;
   }
 
+  String? _selectedSourceValue() {
+    switch (_currentFilter) {
+      case SourceFilter.all:
+        return null;
+      case SourceFilter.alipay:
+        return 'Alipay';
+      case SourceFilter.wechat:
+        return 'WeChat';
+    }
+  }
+
+  String? _selectedTypeValue() {
+    switch (_typeFilter) {
+      case TypeFilter.all:
+        return null;
+      case TypeFilter.expense:
+        return 'EXPENSE';
+      case TypeFilter.income:
+        return 'INCOME';
+      case TypeFilter.notCounted:
+        return 'IGNORE';
+    }
+  }
+
+  Future<void> _refreshDbFilteredRecords({bool notify = true}) async {
+    try {
+      _dbFilteredRecords = await _db.fetchTransactionsWithFilters(
+        source: _selectedSourceValue(),
+        year: _selectedYear,
+        month: _selectedMonth,
+        filterByYear: _filterByYear,
+        type: _selectedTypeValue(),
+        categories: _selectedCategories,
+        searchQuery: _searchQuery,
+      );
+    } catch (e, stackTrace) {
+      debugPrint('SQL筛选回退到内存筛选: $e');
+      debugPrintStack(stackTrace: stackTrace);
+      _dbFilteredRecords = null;
+    }
+    _invalidateFilterCache();
+    if (notify) {
+      notifyListeners();
+    }
+  }
+
+  void _scheduleDbFilterRefresh() {
+    _searchDebounceTimer?.cancel();
+    _searchDebounceTimer = null;
+    _dbFilteredRecords = null;
+    _invalidateFilterCache();
+    notifyListeners();
+    unawaited(_refreshDbFilteredRecords());
+  }
+
   Map<String, int> get summary {
     if (_filterCacheDirty) {
       final _ = records; // 触发缓存更新
@@ -83,6 +145,7 @@ class FinanceProvider extends ChangeNotifier {
   }
 
   bool get loading => _loading;
+  bool get initializing => _initializing;
   SourceFilter get currentFilter => _currentFilter;
   int get selectedYear => _selectedYear;
   int get selectedMonth => _selectedMonth;
@@ -95,7 +158,8 @@ class FinanceProvider extends ChangeNotifier {
   List<String> get customCategories => _customCategories;
   List<CustomCategory> get customCategoryObjects => _customCategoryObjects;
   List<CategoryGroup> get categoryGroups => _categoryGroups;
-  bool get hasActiveFilters => _typeFilter != TypeFilter.all || _selectedCategories.isNotEmpty;
+  bool get hasActiveFilters =>
+      _typeFilter != TypeFilter.all || _selectedCategories.isNotEmpty;
   String formatAmount(int cents) => _currencyFormatter.format(cents / 100);
 
   // 批量编辑 getters
@@ -120,11 +184,52 @@ class FinanceProvider extends ChangeNotifier {
   }
 
   Future<void> loadInitial() async {
-    await _loadCategoryGroups();
-    await _loadFilterTypes();
-    await _loadCustomCategories();
-    await _ensureFilterTypesHaveGroups();
-    await _reload();
+    final isFirstLoad = _initializing;
+    try {
+      await Future.wait([
+        _restoreSelectedMonthYear(),
+        _loadCategoryGroups(),
+        _loadFilterTypes(),
+        _loadCustomCategories(),
+      ]);
+      await _ensureFilterTypesHaveGroups();
+      await _reload();
+    } finally {
+      if (isFirstLoad) {
+        _initializing = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> _restoreSelectedMonthYear() async {
+    final selected = await _db.getHomeLastViewedMonthYear();
+    if (selected == null) {
+      await _persistSelectedMonthYear(
+          year: _selectedYear, month: _selectedMonth);
+      return;
+    }
+
+    final year = selected['year'];
+    final month = selected['month'];
+    if (year == null || month == null || month < 1 || month > 12) {
+      return;
+    }
+
+    _selectedYear = year;
+    _selectedMonth = month;
+  }
+
+  Future<void> _persistSelectedMonthYear({
+    required int year,
+    required int month,
+  }) async {
+    try {
+      await _db.setHomeLastViewedMonthYear(year: year, month: month);
+    } catch (e, stackTrace) {
+      debugPrint('保存首页年月失败: $e');
+      debugPrintStack(stackTrace: stackTrace);
+    }
   }
 
   /// 加载分类分组
@@ -167,17 +272,11 @@ class FinanceProvider extends ChangeNotifier {
   /// 确保筛选类型都有分组关联（仅系统分类）
   Future<void> _ensureFilterTypesHaveGroups() async {
     final groupMap = {for (final g in _categoryGroups) g.name: g.id};
-    final wechatGroupId = groupMap['微信'];
-    final alipayGroupId = groupMap['支付宝'];
 
     bool needsReload = false;
     for (final ft in _filterTypes) {
-      int? targetGroupId;
-      if (kWechatTransactionTypes.contains(ft.name) && wechatGroupId != null) {
-        targetGroupId = wechatGroupId;
-      } else if (kAlipayCategories.contains(ft.name) && alipayGroupId != null) {
-        targetGroupId = alipayGroupId;
-      }
+      final targetGroupId =
+          DatabaseHelper.resolveGroupIdFromMap(ft.name, groupMap);
 
       if (targetGroupId != null && ft.groupId != targetGroupId) {
         await _db.updateFilterTypeGroup(ft.id, targetGroupId);
@@ -224,8 +323,12 @@ class FinanceProvider extends ChangeNotifier {
       await _reload();
       _setLoading(false);
       _showResultSnack(inserted, duplicates);
-    } catch (_) {
+    } catch (e, stackTrace) {
       _setLoading(false);
+      _snackBarMessage = '导入失败，请检查文件格式后重试';
+      debugPrint('导入文件失败: $e');
+      debugPrintStack(stackTrace: stackTrace);
+      notifyListeners();
     }
   }
 
@@ -239,38 +342,49 @@ class FinanceProvider extends ChangeNotifier {
       _setLoading(false);
       _snackBarMessage = '已清空 $deleted 条记录';
       notifyListeners();
-    } catch (_) {
+    } catch (e, stackTrace) {
       _setLoading(false);
+      _snackBarMessage = '清空失败，请重试';
+      debugPrint('清空数据失败: $e');
+      debugPrintStack(stackTrace: stackTrace);
+      notifyListeners();
     }
   }
 
   Future<void> _reload() async {
     _records = await _db.fetchTransactions();
     AnalysisCache.instance.rebuild(_records);
+    await _refreshDbFilteredRecords(notify: false);
     _invalidateFilterCache();
     notifyListeners();
+  }
+
+  Future<void> reload() async {
+    await _reload();
   }
 
   void updateFilter(SourceFilter filter) {
     if (_currentFilter == filter) return;
     _currentFilter = filter;
-    _invalidateFilterCache();
-    notifyListeners();
+    _scheduleDbFilterRefresh();
   }
 
   void updateMonthYear(int year, int month) {
     if (_selectedYear == year && _selectedMonth == month) return;
     _selectedYear = year;
     _selectedMonth = month;
-    _invalidateFilterCache();
-    notifyListeners();
+    unawaited(_persistSelectedMonthYear(year: year, month: month));
+    _scheduleDbFilterRefresh();
   }
 
   void updateSearchQuery(String query) {
     if (_searchQuery == query) return;
     _searchQuery = query;
-    _invalidateFilterCache();
-    notifyListeners();
+    _searchDebounceTimer?.cancel();
+    _searchDebounceTimer = Timer(
+      const Duration(milliseconds: 300),
+      _scheduleDbFilterRefresh,
+    );
   }
 
   void updateAdvancedFilters({
@@ -279,29 +393,27 @@ class FinanceProvider extends ChangeNotifier {
   }) {
     _typeFilter = typeFilter;
     _selectedCategories = categories;
-    _invalidateFilterCache();
-    notifyListeners();
+    _scheduleDbFilterRefresh();
   }
 
   void clearAdvancedFilters() {
     _typeFilter = TypeFilter.all;
     _selectedCategories = {};
-    _invalidateFilterCache();
-    notifyListeners();
+    _scheduleDbFilterRefresh();
   }
 
   void updateFilterByYear(bool value) {
     if (_filterByYear == value) return;
     _filterByYear = value;
-    _invalidateFilterCache();
-    notifyListeners();
+    _scheduleDbFilterRefresh();
   }
 
   List<TransactionRecord> _applyFilter(List<TransactionRecord> records) {
     return records.where((record) {
       // 来源筛选
       final matchesSource = _currentFilter == SourceFilter.all ||
-          (_currentFilter == SourceFilter.alipay && record.source == 'Alipay') ||
+          (_currentFilter == SourceFilter.alipay &&
+              record.source == 'Alipay') ||
           (_currentFilter == SourceFilter.wechat && record.source == 'WeChat');
       if (!matchesSource) return false;
 
@@ -315,9 +427,18 @@ class FinanceProvider extends ChangeNotifier {
       }
 
       // 收支类型筛选
-      if (_typeFilter == TypeFilter.expense && record.type != TransactionType.expense) return false;
-      if (_typeFilter == TypeFilter.income && record.type != TransactionType.income) return false;
-      if (_typeFilter == TypeFilter.notCounted && record.type != TransactionType.ignore) return false;
+      if (_typeFilter == TypeFilter.expense &&
+          record.type != TransactionType.expense) {
+        return false;
+      }
+      if (_typeFilter == TypeFilter.income &&
+          record.type != TransactionType.income) {
+        return false;
+      }
+      if (_typeFilter == TypeFilter.notCounted &&
+          record.type != TransactionType.ignore) {
+        return false;
+      }
 
       // 交易类型筛选（多选）
       if (_selectedCategories.isNotEmpty) {
@@ -331,9 +452,10 @@ class FinanceProvider extends ChangeNotifier {
       // 搜索关键词筛选
       if (_searchQuery.isNotEmpty) {
         final query = _searchQuery.toLowerCase();
-        final matchesSearch = record.counterparty.toLowerCase().contains(query) ||
-            record.description.toLowerCase().contains(query) ||
-            (record.category ?? '').toLowerCase().contains(query);
+        final matchesSearch =
+            record.counterparty.toLowerCase().contains(query) ||
+                record.description.toLowerCase().contains(query) ||
+                (record.category ?? '').toLowerCase().contains(query);
         if (!matchesSearch) return false;
       }
 
@@ -366,11 +488,14 @@ class FinanceProvider extends ChangeNotifier {
         filterByYear: _filterByYear,
       );
       _setLoading(false);
-      _snackBarMessage = success ? '已导出 ${dataToExport.length} 条记录' : '导出失败，请重试';
+      _snackBarMessage =
+          success ? '已导出 ${dataToExport.length} 条记录' : '导出失败，请重试';
       notifyListeners();
-    } catch (_) {
+    } catch (e, stackTrace) {
       _setLoading(false);
       _snackBarMessage = '导出失败，请重试';
+      debugPrint('导出当前数据失败: $e');
+      debugPrintStack(stackTrace: stackTrace);
       notifyListeners();
     }
   }
@@ -421,7 +546,8 @@ class FinanceProvider extends ChangeNotifier {
     if (_selectedIds.isEmpty) return;
     _setLoading(true);
     try {
-      final count = await _db.batchUpdateCategory(_selectedIds.toList(), category);
+      final count =
+          await _db.batchUpdateCategory(_selectedIds.toList(), category);
       await _reload();
       _isBatchEditing = false;
       _selectedIds.clear();
@@ -446,5 +572,11 @@ class FinanceProvider extends ChangeNotifier {
     } finally {
       _setLoading(false);
     }
+  }
+
+  @override
+  void dispose() {
+    _searchDebounceTimer?.cancel();
+    super.dispose();
   }
 }

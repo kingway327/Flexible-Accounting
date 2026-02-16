@@ -24,7 +24,8 @@ class TransactionDetailPage extends StatefulWidget {
 class _TransactionDetailPageState extends State<TransactionDetailPage> {
   final _db = DatabaseHelper.instance;
   final _dateFormatter = DateFormat('yyyy-MM-dd HH:mm:ss');
-  final _currencyFormatter = NumberFormat.currency(symbol: '¥', decimalDigits: 2);
+  final _currencyFormatter =
+      NumberFormat.currency(symbol: '¥', decimalDigits: 2);
 
   late TransactionRecord _record;
   late TextEditingController _noteController;
@@ -66,39 +67,41 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
   }
 
   void _showCategoryPickerSheet() {
+    final financeProvider = context.read<FinanceProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (context) => _CategoryPickerSheet(
+      builder: (bottomSheetContext) => _CategoryPickerSheet(
         currentCategory: _record.category ?? '其他',
         onSelected: (category) async {
-          Navigator.pop(context);
+          Navigator.pop(bottomSheetContext);
           setState(() => _saving = true);
           try {
             await _db.updateTransaction(
               id: _record.id,
               category: category,
             );
-            if (mounted) {
-              await context.read<FinanceProvider>().loadInitial();
-              setState(() {
-                _record = _record.copyWith(category: category);
-                _saving = false;
-              });
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('分类已更改为「$category」')),
-              );
-            }
+            if (!mounted) return;
+            await financeProvider.reload();
+            if (!mounted) return;
+            setState(() {
+              _record = _record.copyWith(category: category);
+              _saving = false;
+            });
+            messenger.showSnackBar(
+              SnackBar(content: Text('分类已更改为「$category」')),
+            );
           } catch (e) {
-            if (mounted) {
-              setState(() => _saving = false);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('修改失败，请重试')),
-              );
-            }
+            if (!mounted) return;
+            setState(() => _saving = false);
+            messenger.showSnackBar(
+              const SnackBar(content: Text('修改失败，请重试')),
+            );
           }
         },
       ),
@@ -110,7 +113,9 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     final theme = Theme.of(context);
     final isExpense = _record.type == TransactionType.expense;
     final isIncome = _record.type == TransactionType.income;
-    final amountColor = isExpense ? Colors.red.shade700 : (isIncome ? Colors.green.shade700 : Colors.grey.shade700);
+    final amountColor = isExpense
+        ? Colors.red.shade700
+        : (isIncome ? Colors.green.shade700 : Colors.grey.shade700);
     final amountPrefix = isExpense ? '-' : (isIncome ? '+' : '');
     final time = DateTime.fromMillisecondsSinceEpoch(_record.timestamp);
 
@@ -142,7 +147,10 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                     ],
                   ),
                 );
-                if (confirmed == true && mounted) {
+                if (!context.mounted) {
+                  return;
+                }
+                if (confirmed == true) {
                   Navigator.pop(context);
                 }
               },
@@ -152,32 +160,33 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
             onPressed: _saving
                 ? null
                 : () async {
+                    final financeProvider = context.read<FinanceProvider>();
+                    final messenger = ScaffoldMessenger.of(context);
                     setState(() => _saving = true);
                     try {
                       await _db.updateTransaction(
                         id: _record.id,
                         note: _noteController.text.trim(),
                       );
-                      if (mounted) {
-                        await context.read<FinanceProvider>().loadInitial();
-                        setState(() {
-                          _record = _record.copyWith(
-                            note: _noteController.text.trim(),
-                          );
-                          _saving = false;
-                          _hasChanges = false;
-                        });
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('备注已保存')),
+                      if (!mounted) return;
+                      await financeProvider.reload();
+                      if (!mounted) return;
+                      setState(() {
+                        _record = _record.copyWith(
+                          note: _noteController.text.trim(),
                         );
-                      }
+                        _saving = false;
+                        _hasChanges = false;
+                      });
+                      messenger.showSnackBar(
+                        const SnackBar(content: Text('备注已保存')),
+                      );
                     } catch (e) {
-                      if (mounted) {
-                        setState(() => _saving = false);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('保存失败，请重试')),
-                        );
-                      }
+                      if (!mounted) return;
+                      setState(() => _saving = false);
+                      messenger.showSnackBar(
+                        const SnackBar(content: Text('保存失败，请重试')),
+                      );
                     }
                   },
             child: _saving
@@ -215,25 +224,30 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: (_sourceColors[_record.source] ?? Colors.grey).withValues(alpha: 0.15),
+                          color: (_sourceColors[_record.source] ?? Colors.grey)
+                              .withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
-                              _sourceIcons[_record.source] ?? Icons.info_outline,
+                              _sourceIcons[_record.source] ??
+                                  Icons.info_outline,
                               size: 16,
-                              color: _sourceColors[_record.source] ?? Colors.grey,
+                              color:
+                                  _sourceColors[_record.source] ?? Colors.grey,
                             ),
                             const SizedBox(width: 4),
                             Text(
                               _record.source == 'WeChat' ? '微信' : '支付宝',
                               style: TextStyle(
                                 fontSize: 12,
-                                color: _sourceColors[_record.source] ?? Colors.grey,
+                                color: _sourceColors[_record.source] ??
+                                    Colors.grey,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -242,7 +256,8 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                       ),
                       const Spacer(),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
                           color: amountColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
@@ -348,7 +363,8 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: theme.colorScheme.primary.withValues(alpha: 0.15),
+                        color:
+                            theme.colorScheme.primary.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
@@ -536,38 +552,44 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     // 构建分组ID到颜色的映射
     final groupIdToColor = <int, Color>{};
     for (final group in _categoryGroups) {
       groupIdToColor[group.id] = Color(group.color);
     }
-    
+
     // 构建分组ID到分组对象的映射
-    final groupById = <int, CategoryGroup>{for (final g in _categoryGroups) g.id: g};
-    
+    final groupById = <int, CategoryGroup>{
+      for (final g in _categoryGroups) g.id: g
+    };
+
     // 获取系统分组
-    final wechatGroup = _categoryGroups.where((g) => g.name == '微信').firstOrNull;
-    final alipayGroup = _categoryGroups.where((g) => g.name == '支付宝').firstOrNull;
-    final wechatColor = wechatGroup != null ? Color(wechatGroup.color) : const Color(0xFF4CAF50);
-    final alipayColor = alipayGroup != null ? Color(alipayGroup.color) : const Color(0xFF1976D2);
-    
+    final wechatGroup =
+        _categoryGroups.where((g) => g.name == '微信').firstOrNull;
+    final alipayGroup =
+        _categoryGroups.where((g) => g.name == '支付宝').firstOrNull;
+
     // 将分类按分组组织
     final categoriesByGroup = <int?, List<String>>{};
-    
+
     // 添加自定义分类（按其分组归类）
     for (final cat in _customCategories) {
       categoriesByGroup.putIfAbsent(cat.groupId, () => []).add(cat.name);
     }
-    
+
     // 添加系统分类（微信和支付宝）
     if (wechatGroup != null) {
-      categoriesByGroup.putIfAbsent(wechatGroup.id, () => []).addAll(kWechatTransactionTypes);
+      categoriesByGroup
+          .putIfAbsent(wechatGroup.id, () => [])
+          .addAll(kWechatTransactionTypes);
     }
     if (alipayGroup != null) {
-      categoriesByGroup.putIfAbsent(alipayGroup.id, () => []).addAll(kAlipayCategories);
+      categoriesByGroup
+          .putIfAbsent(alipayGroup.id, () => [])
+          .addAll(kAlipayCategories);
     }
-    
+
     // 按分组排序：无分组放在最前面，然后按分组的 sortOrder 排序
     final sortedGroupIds = categoriesByGroup.keys.toList()
       ..sort((a, b) {
@@ -623,13 +645,15 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
                           Builder(
                             builder: (context) {
                               final groupId = sortedGroupIds[i];
-                              final categories = categoriesByGroup[groupId] ?? [];
-                              final group = groupId != null ? groupById[groupId] : null;
+                              final categories =
+                                  categoriesByGroup[groupId] ?? [];
+                              final group =
+                                  groupId != null ? groupById[groupId] : null;
                               final groupName = group?.name ?? '无分组';
-                              final groupColor = group != null 
-                                  ? Color(group.color) 
+                              final groupColor = group != null
+                                  ? Color(group.color)
                                   : Colors.grey.shade600;
-                              
+
                               return Column(
                                 mainAxisSize: MainAxisSize.min,
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -646,7 +670,8 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
                                     spacing: 12,
                                     runSpacing: 12,
                                     children: categories.map((category) {
-                                      return _buildCategoryChip(theme, category, _categoryGroups);
+                                      return _buildCategoryChip(
+                                          theme, category, _categoryGroups);
                                     }).toList(),
                                   ),
                                 ],
@@ -666,11 +691,14 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
   /// 获取分类颜色（从分组数据或系统默认颜色）
   Color? _getCategoryColor(String category) {
     // 自定义分类：使用其关联分组的颜色（如果有）
-    if (!kWechatTransactionTypes.contains(category) && !kAlipayCategories.contains(category)) {
+    if (!kWechatTransactionTypes.contains(category) &&
+        !kAlipayCategories.contains(category)) {
       // 从当前分类名称判断（可能对应多个自定义分类）
       for (final customCat in _customCategories) {
         if (customCat.name == category && customCat.groupId != null) {
-          final group = _categoryGroups.where((g) => g.id == customCat.groupId).firstOrNull;
+          final group = _categoryGroups
+              .where((g) => g.id == customCat.groupId)
+              .firstOrNull;
           return group != null ? Color(group.color) : null;
         }
       }
@@ -678,20 +706,28 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
 
     // 系统分类：从分组数据获取颜色（支持用户自定义颜色）
     if (kWechatTransactionTypes.contains(category)) {
-      final wechatGroup = _categoryGroups.where((g) => g.name == '微信').firstOrNull;
-      return wechatGroup != null ? Color(wechatGroup.color) : const Color(0xFF4CAF50);
+      final wechatGroup =
+          _categoryGroups.where((g) => g.name == '微信').firstOrNull;
+      return wechatGroup != null
+          ? Color(wechatGroup.color)
+          : const Color(0xFF4CAF50);
     } else if (kAlipayCategories.contains(category)) {
-      final alipayGroup = _categoryGroups.where((g) => g.name == '支付宝').firstOrNull;
-      return alipayGroup != null ? Color(alipayGroup.color) : const Color(0xFF1976D2);
+      final alipayGroup =
+          _categoryGroups.where((g) => g.name == '支付宝').firstOrNull;
+      return alipayGroup != null
+          ? Color(alipayGroup.color)
+          : const Color(0xFF1976D2);
     }
 
     return null;
   }
 
-  Widget _buildCategoryChip(ThemeData theme, String category, List<CategoryGroup> groups) {
+  Widget _buildCategoryChip(
+      ThemeData theme, String category, List<CategoryGroup> groups) {
     final isSelected = category == _selected;
     final icon = getCategoryIcon(category);
-    final categoryColor = _getCategoryColor(category) ?? theme.colorScheme.primary;
+    final categoryColor =
+        _getCategoryColor(category) ?? theme.colorScheme.primary;
 
     return GestureDetector(
       onTap: () {
@@ -708,7 +744,9 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
               ? categoryColor.withValues(alpha: 0.15)
               : theme.colorScheme.surfaceContainerHighest,
           border: Border.all(
-            color: isSelected ? categoryColor : categoryColor.withValues(alpha: 0.3),
+            color: isSelected
+                ? categoryColor
+                : categoryColor.withValues(alpha: 0.3),
             width: isSelected ? 2 : 1,
           ),
           borderRadius: BorderRadius.circular(8),
@@ -719,7 +757,9 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
             Icon(
               icon,
               size: 18,
-              color: isSelected ? categoryColor : theme.colorScheme.onSurfaceVariant,
+              color: isSelected
+                  ? categoryColor
+                  : theme.colorScheme.onSurfaceVariant,
             ),
             const SizedBox(width: 6),
             Text(

@@ -1,252 +1,156 @@
-# AGENTS.md - Local First Finance App
+# AGENTS.md - local_first_finance
 
-> Guidelines for AI agents working on this Flutter codebase.
+Guidelines for coding agents working in this Flutter/Dart repository.
 
-## Project Overview
+## 1) Scope and Tech Stack
 
-A local-first personal finance app for importing and analyzing WeChat Pay and Alipay transaction records from CSV/Excel files. Built with Flutter, using SQLite for local persistence and Provider for state management.
+- Project type: Flutter app (`pubspec.yaml`) with Android/iOS/macOS/Linux/Windows targets.
+- Language: Dart (SDK `>=3.3.0 <4.0.0`).
+- State management: `provider` + `ChangeNotifier`.
+- Persistence: `sqflite` (SQLite), local-first data model.
+- Key folders: `lib/`, `test/`, `android/`, `ios/`, `macos/`, `linux/`, `windows/`.
 
-## Build & Run Commands
+## 2) Source of Truth for Rules
+
+- Lint config: `analysis_options.yaml` includes `package:flutter_lints/flutter.yaml`.
+- There are no custom enabled lint overrides; commented examples only.
+- No `.cursorrules` found.
+- No `.cursor/rules/` found.
+- No `.github/copilot-instructions.md` found.
+
+## 3) Build / Run / Analyze Commands
+
+Run from repository root (`local_first_finance/`).
 
 ```bash
-# Navigate to project directory
-cd local_first_finance
-
-# Get dependencies
 flutter pub get
-
-# Run the app (debug mode)
 flutter run
-
-# Build release APK
-flutter build apk --release
-
-# Build iOS (requires macOS)
-flutter build ios --release
-```
-
-## Lint & Analyze
-
-```bash
-# Run static analysis (uses flutter_lints/flutter.yaml)
 flutter analyze
-
-# Run analysis with specific file
-flutter analyze lib/pages/analysis_page.dart
-
-# Format code
 dart format .
-
-# Format specific file
-dart format lib/main.dart
 ```
 
-## Test Commands
+Useful targeted commands:
 
 ```bash
-# Run all tests
+flutter analyze lib/providers/finance_provider.dart
+dart format lib/main.dart
+flutter clean
+```
+
+Platform builds (when needed):
+
+```bash
+flutter build apk --release
+flutter build ios --release
+flutter build windows --release
+```
+
+## 4) Test Commands (including single-test)
+
+```bash
 flutter test
-
-# Run single test file
 flutter test test/widget_test.dart
-
-# Run specific test by name
-flutter test --name "App builds"
-
-# Run tests with coverage
+flutter test test/widget_test.dart --plain-name "App builds"
 flutter test --coverage
-
-# Run tests in verbose mode
-flutter test -v
+flutter test -r expanded
 ```
 
-## Project Structure
+Notes:
+- Prefer running the most local test scope first (single file or single case).
+- Current test suite is minimal; avoid assuming broad coverage.
 
-```
-lib/
-├── main.dart                    # App entry, FinanceProvider, HomeScreen
-├── models/
-│   └── models.dart              # TransactionRecord, CustomCategory, TransactionType
-├── data/
-│   ├── database_helper.dart     # SQLite operations (singleton pattern)
-│   ├── parsers.dart             # WeChat/Alipay CSV/Excel parsers
-│   ├── analysis_helpers.dart    # Data aggregation (weekly/monthly/yearly)
-│   └── export_service.dart      # CSV export functionality
-├── widgets/
-│   └── month_picker.dart        # Reusable month/year picker component
-└── pages/
-    ├── analysis_page.dart       # Analysis dashboard with tabs
-    ├── transaction_detail_page.dart
-    └── category_manage_page.dart
-```
+## 5) Import and File Organization
 
-## Code Style Guidelines
+Follow observed import grouping pattern:
+1. Dart SDK imports
+2. Flutter imports
+3. Third-party package imports
+4. Project imports (relative paths are common)
 
-### Imports
-
-Order imports in this sequence:
-1. Dart SDK (`dart:async`, `dart:convert`, etc.)
-2. Flutter SDK (`package:flutter/material.dart`)
-3. External packages (alphabetically)
-4. Project imports (relative paths preferred)
+Example pattern:
 
 ```dart
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../data/database_helper.dart';
 import '../models/models.dart';
 ```
 
-### Naming Conventions
+Keep one blank line between groups.
 
-| Type | Convention | Example |
-|------|------------|---------|
-| Classes | PascalCase | `TransactionRecord`, `DatabaseHelper` |
-| Variables/Functions | camelCase | `_selectedYear`, `fetchTransactions()` |
-| Constants | kCamelCase or SCREAMING_SNAKE | `kCategoryColors`, `kLightBlue` |
-| Private members | Leading underscore | `_db`, `_loading`, `_loadData()` |
-| Files | snake_case | `database_helper.dart`, `analysis_page.dart` |
+## 6) Naming Conventions
 
-### Widget Patterns
+- Classes/enums: `PascalCase` (`TransactionRecord`, `FinanceProvider`).
+- Methods/variables/params: `camelCase`.
+- Private members/types: leading underscore (`_records`, `_StartupHost`).
+- File names: `snake_case.dart`.
+- Top-level constants: `kCamelCase` (`kLightBlue`, `kWechatTransactionTypes`).
 
-- Use `const` constructors wherever possible
-- Private widgets use underscore prefix: `_FilterChip`, `_TransactionTile`
-- Prefer `StatelessWidget` unless state is needed
-- Named parameters with `required` keyword
+## 7) Types and Data Modeling
 
-```dart
-class _FilterChip extends StatelessWidget {
-  const _FilterChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
+- Avoid implicit dynamic for model fields; use explicit types.
+- Use nullable types intentionally (`String?`, `int?`).
+- Prefer `final` unless mutation is required.
+- For DB maps, use `Map<String, Object?>`.
+- Encode money in integer cents, not floating currency.
+- Store time as epoch milliseconds (`int`).
 
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-  // ...
-}
-```
+## 8) State Management and UI Patterns
 
-### State Management
+- App-wide state lives in provider classes extending `ChangeNotifier`.
+- Trigger updates via `notifyListeners()` after state changes.
+- Access providers via `context.read<T>()`, `context.watch<T>()`, or `Consumer<T>`.
+- Prefer `const` widgets/constructors wherever possible.
+- Use `StatefulWidget` only when local mutable UI state is needed.
 
-- Use `Provider` + `ChangeNotifier` for app-wide state
-- Local widget state uses `StatefulWidget`
-- Access provider with `Consumer<T>` or `context.read<T>()`
+## 9) Database and Service Patterns
 
-### Database Patterns
+- `DatabaseHelper` is a singleton (`DatabaseHelper._()` + `instance`).
+- DB/service methods are asynchronous and return typed results.
+- Use batch operations for multi-row writes when possible.
+- Keep conversion boundaries explicit (`toMap`/`fromMap`).
 
-- `DatabaseHelper` uses singleton pattern
-- All DB methods are async
-- Money stored as integers (cents): `amount * 100`
-- Timestamps as milliseconds since epoch
+## 10) Error Handling Expectations
 
-### Error Handling
+- Wrap I/O and DB calls in `try/catch`.
+- In user-facing flows, graceful failure with UI feedback is preferred.
+- Silent catches exist in current code; do not add noisy logging by default.
+- Do not throw from widget build paths.
 
-- Use `try-catch` for async operations
-- Empty catch blocks acceptable for user-facing operations (silently fail)
-- Never throw in UI code - handle gracefully
+When adding new error handling:
+- Preserve app responsiveness first.
+- Return safe defaults when behavior already follows that pattern.
+- Log only where the surrounding code already logs.
 
-```dart
-try {
-  final content = await decodeCsvBytes(bytes);
-  // process...
-} catch (_) {
-  _setLoading(false);
-  // Silently fail or show snackbar
-}
-```
+## 11) Formatting and Style
 
-### Type Safety
+- Use `dart format` output as canonical formatting.
+- 2-space indentation.
+- Trailing commas in multiline widget/argument lists.
+- Keep methods focused and cohesive; avoid unrelated refactors in bug fixes.
 
-- Always specify types for class fields
-- Use `Object?` for nullable Map values: `Map<String, Object?>`
-- Prefer `final` for immutable fields
-- Use enums for fixed sets: `TransactionType`, `SourceFilter`
+## 12) Testing Guidance for Agents
 
-### Formatting
+- Add/adjust widget tests when changing UI behavior.
+- Keep test names behavior-focused.
+- Use `pumpWidget`, finders, and explicit expectations.
+- For fixes, prefer adding a narrow regression test when practical.
 
-- 2-space indentation (Dart default)
-- Max line length: 80-100 characters
-- Trailing commas for multi-line parameter lists
-- Single blank line between methods
+## 13) Files Agents Should Treat Carefully
 
-### Color Constants
+- Generated/ephemeral Flutter files (for example under `windows/flutter/ephemeral/`) should not be hand-edited.
+- Platform build files (`android/`, `ios/`, `macos/`, `windows/`, `linux/`) should be touched only when task-relevant.
+- `lib/main.dart.backup` exists; do not treat it as primary source unless task explicitly references it.
 
-Define colors as package-level constants:
+## 14) Practical Workflow for Agentic Edits
 
-```dart
-const Color kLightBlue = Color(0xFF90CAF9);
-const Color kDarkBlue = Color(0xFF1976D2);
-const Color kTodayBg = Color(0xFFE3F2FD);
-```
+1. Read `analysis_options.yaml`, `pubspec.yaml`, and nearby feature files first.
+2. Make minimal, surgical changes aligned with existing patterns.
+3. Run `dart format` on changed files.
+4. Run `flutter analyze`.
+5. Run the narrowest relevant tests, then broader tests as needed.
 
-### Documentation
-
-- Use `///` for public API documentation
-- Simple `//` for implementation notes
-- Document complex business logic
-
-## Key Dependencies
-
-| Package | Purpose |
-|---------|---------|
-| provider | State management |
-| sqflite | SQLite database |
-| file_picker | File selection |
-| csv | CSV parsing |
-| excel | Excel file parsing |
-| charset_converter | GBK encoding support |
-| intl | Date/number formatting |
-| fl_chart | Charts and graphs |
-| share_plus | Share functionality |
-
-## Testing Guidelines
-
-- Widget tests use `flutter_test` package
-- Use `WidgetTester` for interaction tests
-- Test files mirror lib structure: `lib/foo.dart` -> `test/foo_test.dart`
-
-```dart
-testWidgets('description', (WidgetTester tester) async {
-  await tester.pumpWidget(const MyWidget());
-  expect(find.byType(SomeWidget), findsOneWidget);
-});
-```
-
-## Common Patterns
-
-### Singleton Services
-
-```dart
-class DatabaseHelper {
-  DatabaseHelper._();
-  static final DatabaseHelper instance = DatabaseHelper._();
-}
-```
-
-### Model Serialization
-
-```dart
-Map<String, Object?> toMap() { /* ... */ }
-static MyModel fromMap(Map<String, Object?> map) { /* ... */ }
-```
-
-### Currency Formatting
-
-```dart
-final formatter = NumberFormat.currency(symbol: '¥', decimalDigits: 2);
-String formatted = formatter.format(cents / 100);
-```
-
-## Environment
-
-- Dart SDK: >=3.3.0 <4.0.0
-- Flutter: Latest stable
-- Linting: `flutter_lints` package (recommended rules)
+This document is evidence-based from the current repository state and should be updated when tooling or conventions change.

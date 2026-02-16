@@ -1,6 +1,5 @@
-/// 分类常量定义
-/// 
-/// 微信和支付宝的交易分类常量，用于分类筛选和数据处理。
+// 分类常量定义
+// 微信和支付宝的交易分类常量，用于分类筛选和数据处理。
 
 /// Google Material Design 颜色列表 (500 shades)
 const List<int> kGoogleColors = [
@@ -82,12 +81,4 @@ const List<String> kSystemCategories = [
   ...kAlipayCategories,
 ];
 
-/// 消费分类（用于收支分析页的分类统计）
 const List<String> kSpendingCategories = kSystemCategories;
-
-/// 兼容旧代码
-@Deprecated('Use kWechatTransactionTypes and kAlipayCategories instead')
-const List<String> kTransactionCategories = [
-  ...kWechatTransactionTypes,
-  ...kAlipayCategories,
-];

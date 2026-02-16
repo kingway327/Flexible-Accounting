@@ -1,6 +1,5 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import '../../models/models.dart';
 import '../../data/analysis_helpers.dart';
 import 'analysis_common.dart';
 
@@ -25,7 +24,7 @@ class _AnalysisPieChartState extends State<AnalysisPieChart> {
 
   @override
   Widget build(BuildContext context) {
-    // 复位选中状态当数据变化时? 
+    // 复位选中状态当数据变化时?
     // 不，保持状态可能更好，或者在 didUpdateWidget 中重置?
     // 暂时简单处理
 
@@ -75,7 +74,8 @@ class _AnalysisPieChartState extends State<AnalysisPieChart> {
       children: [
         Text(
           widget.isExpense ? '支出分类' : '收入分类',
-          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+          style: theme.textTheme.titleMedium
+              ?.copyWith(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 16),
         SizedBox(
@@ -89,7 +89,8 @@ class _AnalysisPieChartState extends State<AnalysisPieChart> {
                     touchCallback: (event, response) {
                       if (event.isInterestedForInteractions &&
                           response?.touchedSection != null) {
-                        final index = response!.touchedSection!.touchedSectionIndex;
+                        final index =
+                            response!.touchedSection!.touchedSectionIndex;
                         if (index >= 0 && index < displayCategories.length) {
                           setState(() {
                             _touchedPieIndex = index;
@@ -107,17 +108,17 @@ class _AnalysisPieChartState extends State<AnalysisPieChart> {
                     final percentage = widget.totalAmount > 0
                         ? (data.amount / widget.totalAmount * 100)
                         : 0.0;
-                    final color = kCategoryColors[index % kCategoryColors.length];
-                    
+                    final color =
+                        kCategoryColors[index % kCategoryColors.length];
+
                     // 是否有用户主动选中（非默认状态）
                     final hasUserSelection = _touchedPieIndex != null;
-                    
+
                     // 标签显示逻辑：
                     // - 有选中时：只显示选中的那个标签
                     // - 无选中时（默认）：显示占比 >= 5% 的标签
-                    final shouldShowBadge = hasUserSelection
-                        ? isSelected
-                        : percentage >= 5;
+                    final shouldShowBadge =
+                        hasUserSelection ? isSelected : percentage >= 5;
 
                     return PieChartSectionData(
                       color: color,
@@ -145,7 +146,8 @@ class _AnalysisPieChartState extends State<AnalysisPieChart> {
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 200),
                 child: Column(
-                  key: ValueKey('${selectedCategory.category}-${selectedCategory.amount}'),
+                  key: ValueKey(
+                      '${selectedCategory.category}-${selectedCategory.amount}'),
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
@@ -178,7 +180,8 @@ class _AnalysisPieChartState extends State<AnalysisPieChart> {
         ),
         // 图例
         const SizedBox(height: 12),
-        _buildPieLegend(theme, displayCategories, widget.totalAmount, selectedIndex),
+        _buildPieLegend(
+            theme, displayCategories, widget.totalAmount, selectedIndex),
       ],
     );
   }
@@ -203,7 +206,7 @@ class _AnalysisPieChartState extends State<AnalysisPieChart> {
         boxShadow: isSelected
             ? [
                 BoxShadow(
-                  color: color.withOpacity(0.3),
+                  color: color.withValues(alpha: 0.3),
                   blurRadius: 4,
                   offset: const Offset(0, 1),
                 ),
@@ -235,9 +238,8 @@ class _AnalysisPieChartState extends State<AnalysisPieChart> {
         final index = entry.key;
         final data = entry.value;
         final color = kCategoryColors[index % kCategoryColors.length];
-        final percentage = totalAmount > 0
-            ? (data.amount / totalAmount * 100)
-            : 0.0;
+        final percentage =
+            totalAmount > 0 ? (data.amount / totalAmount * 100) : 0.0;
         final isSelected = index == selectedIndex;
 
         return GestureDetector(

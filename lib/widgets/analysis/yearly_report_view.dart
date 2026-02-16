@@ -1,7 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../models/models.dart';
 import '../../data/analysis_helpers.dart';
 import 'analysis_common.dart';
 import 'analysis_pie_chart.dart';
@@ -14,7 +13,7 @@ class YearlyReportView extends StatelessWidget {
   final int averageAmount;
   final List<YearlyMonthTotal> yearlyMonthlyTotals;
   final List<CategoryTotal> categoryTotals;
-  
+
   // Callbacks
   final VoidCallback onYearPickerTap;
   final ValueChanged<bool> onTypeChanged;
@@ -48,7 +47,14 @@ class YearlyReportView extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       children: [
         // Header
-        _buildHeaderSection(theme),
+        AnalysisReportHeader(
+          periodLabel: '$selectedYear年',
+          onPeriodTap: onYearPickerTap,
+          isExpense: isExpense,
+          onTypeChanged: onTypeChanged,
+          totalAmount: totalAmount,
+          currencyFormatter: currencyFormatter,
+        ),
         const SizedBox(height: 24),
         // 月度对比图
         _buildBarChartSection(theme),
@@ -61,71 +67,11 @@ class YearlyReportView extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         // 分类排行榜
-        _buildCategoryRankingSection(theme),
-      ],
-    );
-  }
-
-  /// 年度 Header
-  Widget _buildHeaderSection(ThemeData theme) {
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            GestureDetector(
-              onTap: onYearPickerTap,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '${selectedYear}年',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Icon(
-                    Icons.keyboard_arrow_down,
-                    size: 24,
-                    color: theme.colorScheme.onSurface,
-                  ),
-                ],
-              ),
-            ),
-            SegmentedButton<bool>(
-              segments: const [
-                ButtonSegment(value: true, label: Text('支出')),
-                ButtonSegment(value: false, label: Text('收入')),
-              ],
-              selected: {isExpense},
-              onSelectionChanged: (value) {
-                if (value.isNotEmpty) {
-                  onTypeChanged(value.first);
-                }
-              },
-              style: const ButtonStyle(
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TweenAnimationBuilder<double>(
-            tween: Tween<double>(begin: 0, end: totalAmount / 100),
-            duration: const Duration(milliseconds: 500),
-            curve: Curves.easeOut,
-            builder: (context, value, child) {
-              return Text(
-                currencyFormatter.format(value),
-                style: theme.textTheme.headlineLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: isExpense ? Colors.red.shade700 : Colors.green.shade700,
-                ),
-              );
-            },
-          ),
+        CategoryRankingSection(
+          categoryTotals: categoryTotals,
+          totalAmount: totalAmount,
+          isExpense: isExpense,
+          onCategoryTap: onCategoryTap,
         ),
       ],
     );
@@ -135,13 +81,11 @@ class YearlyReportView extends StatelessWidget {
   Widget _buildBarChartSection(ThemeData theme) {
     if (yearlyMonthlyTotals.isEmpty) return const SizedBox.shrink();
 
-    // 颜色常量
-    const Color kLightBlue = Color(0xFF90CAF9);
-    const Color kDarkBlue = Color(0xFF1976D2);
-
-    final maxAmount = yearlyMonthlyTotals.fold<int>(0, (max, e) => e.amount > max ? e.amount : max);
+    final maxAmount = yearlyMonthlyTotals.fold<int>(
+        0, (max, e) => e.amount > max ? e.amount : max);
     final avgY = averageAmount / 100;
-    final maxY = (maxAmount > averageAmount ? maxAmount : averageAmount) / 100 * 1.3;
+    final maxY =
+        (maxAmount > averageAmount ? maxAmount : averageAmount) / 100 * 1.3;
     final selectedMonth = selectedYearlyMonth;
 
     return Column(
@@ -152,7 +96,8 @@ class YearlyReportView extends StatelessWidget {
           children: [
             Text(
               '月度对比',
-              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+              style: theme.textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w600),
             ),
             // 图例
             Row(
@@ -172,7 +117,7 @@ class YearlyReportView extends StatelessWidget {
               // 计算每个柱子的位置，用于放置可点击的 tooltip
               final chartWidth = constraints.maxWidth;
               final barWidth = chartWidth / 12;
-              
+
               return Stack(
                 children: [
                   // 柱状图
@@ -201,9 +146,12 @@ class YearlyReportView extends StatelessWidget {
                             },
                           ),
                         ),
-                        leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        leftTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false)),
+                        topTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false)),
+                        rightTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false)),
                       ),
                       gridData: const FlGridData(show: false),
                       borderData: FlBorderData(show: false),
@@ -227,7 +175,8 @@ class YearlyReportView extends StatelessWidget {
                           ),
                         ],
                       ),
-                      barGroups: yearlyMonthlyTotals.asMap().entries.map((entry) {
+                      barGroups:
+                          yearlyMonthlyTotals.asMap().entries.map((entry) {
                         final index = entry.key;
                         final data = entry.value;
                         final isSelected = data.month == selectedMonth;
@@ -238,7 +187,8 @@ class YearlyReportView extends StatelessWidget {
                               toY: data.amount / 100,
                               color: isSelected ? kDarkBlue : kLightBlue,
                               width: 20,
-                              borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                              borderRadius: const BorderRadius.vertical(
+                                  top: Radius.circular(4)),
                             ),
                           ],
                           // 不显示内置 tooltip，使用自定义的
@@ -248,7 +198,8 @@ class YearlyReportView extends StatelessWidget {
                       barTouchData: BarTouchData(
                         enabled: true,
                         touchCallback: (event, response) {
-                          if (event.isInterestedForInteractions && response?.spot != null) {
+                          if (event.isInterestedForInteractions &&
+                              response?.spot != null) {
                             final index = response!.spot!.touchedBarGroupIndex;
                             if (index >= 0 && index < 12) {
                               onMonthChanged(index + 1);
@@ -259,7 +210,8 @@ class YearlyReportView extends StatelessWidget {
                           getTooltipColor: (group) => Colors.transparent,
                           tooltipPadding: EdgeInsets.zero,
                           tooltipMargin: 0,
-                          getTooltipItem: (group, groupIndex, rod, rodIndex) => null,
+                          getTooltipItem: (group, groupIndex, rod, rodIndex) =>
+                              null,
                         ),
                       ),
                     ),
@@ -272,15 +224,19 @@ class YearlyReportView extends StatelessWidget {
                       final index = entry.key;
                       final data = entry.value;
                       final isSelected = data.month == selectedMonth;
-                      if (!isSelected || data.amount <= 0) return const SizedBox.shrink();
-                      
+                      if (!isSelected || data.amount <= 0) {
+                        return const SizedBox.shrink();
+                      }
+
                       // 计算 tooltip 位置
                       final barCenterX = barWidth * index + barWidth / 2;
-                      final barHeight = maxY > 0 ? (data.amount / 100) / maxY : 0;
+                      final barHeight =
+                          maxY > 0 ? (data.amount / 100) / maxY : 0;
                       // 图表高度减去底部标题空间(30)，tooltip 在柱子上方
-                      final chartHeight = 250.0 - 30;
-                      final tooltipY = chartHeight * (1 - barHeight) - 45; // 45 是 tooltip 高度 + margin
-                      
+                      const chartHeight = 220.0;
+                      final tooltipY = chartHeight * (1 - barHeight) -
+                          45; // 45 是 tooltip 高度 + margin
+
                       // tooltip 宽度约 90，计算水平位置并确保不超出边界
                       const tooltipWidth = 90.0;
                       var tooltipX = barCenterX - tooltipWidth / 2;
@@ -292,14 +248,15 @@ class YearlyReportView extends StatelessWidget {
                       if (tooltipX + tooltipWidth > chartWidth) {
                         tooltipX = chartWidth - tooltipWidth;
                       }
-                      
+
                       return Positioned(
                         left: tooltipX,
                         top: tooltipY > 0 ? tooltipY : 0,
                         child: GestureDetector(
                           onTap: () => onMonthTap(data.month, data.amount),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
                             decoration: BoxDecoration(
                               color: kDarkBlue,
                               borderRadius: BorderRadius.circular(8),
@@ -312,7 +269,7 @@ class YearlyReportView extends StatelessWidget {
                               ],
                             ),
                             child: Text(
-                              '${selectedYear}年${data.month}月\n${formatAmount(data.amount)}',
+                              '$selectedYear年${data.month}月\n${formatAmount(data.amount)}',
                               textAlign: TextAlign.center,
                               style: const TextStyle(
                                 color: Colors.white,
@@ -329,44 +286,6 @@ class YearlyReportView extends StatelessWidget {
             },
           ),
         ),
-      ],
-    );
-  }
-
-  /// 年度分类排行榜
-  Widget _buildCategoryRankingSection(ThemeData theme) {
-    if (categoryTotals.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 40),
-        child: Center(
-          child: Text(
-            '暂无数据',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ...categoryTotals.asMap().entries.map((entry) {
-          final index = entry.key;
-          final data = entry.value;
-          final percentage = totalAmount > 0 ? (data.amount / totalAmount * 100) : 0.0;
-
-          return CategoryItem(
-            rank: index + 1,
-            category: data.category,
-            percentage: percentage,
-            amount: data.amount,
-            count: data.count,
-            isExpense: isExpense,
-            onTap: () => onCategoryTap(data.category, data.amount, data.count),
-          );
-        }),
       ],
     );
   }

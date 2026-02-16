@@ -33,8 +33,8 @@ class FilterTypeGridItem extends StatelessWidget {
           color: theme.colorScheme.surfaceContainerHighest,
           border: Border.all(
             color: hasGroup
-                ? Color(groupColor).withOpacity(0.4)
-                : theme.colorScheme.outline.withOpacity(0.3),
+                ? Color(groupColor).withValues(alpha: 0.4)
+                : theme.colorScheme.outline.withValues(alpha: 0.3),
             width: 1,
           ),
           borderRadius: BorderRadius.circular(12),
@@ -69,7 +69,7 @@ class FilterTypeGridItem extends StatelessWidget {
               style: theme.textTheme.bodySmall?.copyWith(
                 fontSize: 10,
                 color: hasGroup
-                    ? Color(groupColor).withOpacity(0.8)
+                    ? Color(groupColor).withValues(alpha: 0.8)
                     : theme.colorScheme.onSurfaceVariant,
               ),
             ),

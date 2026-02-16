@@ -1,16 +1,50 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'data/database_helper.dart';
+import 'pages/splash_screen.dart';
 import 'providers/finance_provider.dart';
 import 'widgets/home/home_screen.dart';
 
-void main() {
-  runApp(const FinanceApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final startupConfig = await _loadStartupConfig();
+  runApp(FinanceApp(startupConfig: startupConfig));
+}
+
+Future<StartupConfig> _loadStartupConfig() async {
+  final hour = DateTime.now().hour;
+  final isDaytime = hour >= 6 && hour < 18;
+
+  final db = DatabaseHelper.instance;
+  final animationEnabled = await db.getStartupAnimationEnabled();
+  final shownOnce = await db.hasShownStartupAnimationOnce();
+  final shouldShowSplash = animationEnabled || !shownOnce;
+
+  return StartupConfig(
+    isDaytime: isDaytime,
+    shouldShowSplash: shouldShowSplash,
+    markShownOnFinish: !shownOnce,
+  );
+}
+
+class StartupConfig {
+  const StartupConfig({
+    required this.isDaytime,
+    required this.shouldShowSplash,
+    required this.markShownOnFinish,
+  });
+
+  final bool isDaytime;
+  final bool shouldShowSplash;
+  final bool markShownOnFinish;
 }
 
 /// 本地优先记账应用
 class FinanceApp extends StatelessWidget {
-  const FinanceApp({super.key});
+  const FinanceApp({super.key, required this.startupConfig});
+
+  final StartupConfig startupConfig;
 
   @override
   Widget build(BuildContext context) {
@@ -23,8 +57,45 @@ class FinanceApp extends StatelessWidget {
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
           useMaterial3: true,
         ),
-        home: const HomeScreen(),
+        home: _StartupHost(startupConfig: startupConfig),
       ),
+    );
+  }
+}
+
+class _StartupHost extends StatefulWidget {
+  const _StartupHost({required this.startupConfig});
+
+  final StartupConfig startupConfig;
+
+  @override
+  State<_StartupHost> createState() => _StartupHostState();
+}
+
+class _StartupHostState extends State<_StartupHost> {
+  late bool _showSplash;
+
+  @override
+  void initState() {
+    super.initState();
+    _showSplash = widget.startupConfig.shouldShowSplash;
+  }
+
+  void _onSplashFinished() {
+    if (!mounted) return;
+    setState(() => _showSplash = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_showSplash) {
+      return const HomeScreen();
+    }
+
+    return SplashScreen(
+      isDaytime: widget.startupConfig.isDaytime,
+      markShownOnFinish: widget.startupConfig.markShownOnFinish,
+      onFinished: _onSplashFinished,
     );
   }
 }

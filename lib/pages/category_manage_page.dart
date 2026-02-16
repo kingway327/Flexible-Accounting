@@ -1,12 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import '../data/database_helper.dart';
 import '../constants/categories.dart';
-import '../providers/finance_provider.dart';
 import '../models/models.dart';
-import '../utils/category_icons.dart';
-import '../widgets/category_grid.dart';
 import '../widgets/filter_type_grid_item.dart';
 import '../widgets/dialogs/category_dialogs.dart';
 
@@ -29,17 +25,26 @@ class _CategoryManagePageState extends State<CategoryManagePage>
   List<FilterType> _filterTypes = [];
   // 分组
   List<CategoryGroup> _categoryGroups = [];
+  bool _playStartupAnimation = false;
+  bool _homeIconGuideEnabled = false;
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
+    _tabController.addListener(_handleTabChanged);
     _loadData();
+  }
+
+  void _handleTabChanged() {
+    if (!mounted) return;
+    setState(() {});
   }
 
   @override
   void dispose() {
+    _tabController.removeListener(_handleTabChanged);
     _tabController.dispose();
     super.dispose();
   }
@@ -49,7 +54,19 @@ class _CategoryManagePageState extends State<CategoryManagePage>
     _customCategories = await _db.fetchCustomCategories();
     _filterTypes = await _db.fetchFilterTypes();
     _categoryGroups = await _db.fetchCategoryGroups();
+    _playStartupAnimation = await _db.getStartupAnimationEnabled();
+    _homeIconGuideEnabled = await _db.getHomeIconGuideEnabled();
     setState(() => _loading = false);
+  }
+
+  Future<void> _updateStartupAnimationEnabled(bool enabled) async {
+    setState(() => _playStartupAnimation = enabled);
+    await _db.setStartupAnimationEnabled(enabled);
+  }
+
+  Future<void> _updateHomeIconGuideEnabled(bool enabled) async {
+    setState(() => _homeIconGuideEnabled = enabled);
+    await _db.setHomeIconGuideEnabled(enabled);
   }
 
   @override
@@ -58,7 +75,7 @@ class _CategoryManagePageState extends State<CategoryManagePage>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('分类管理'),
+        title: const Text('系统设置'),
         centerTitle: true,
         bottom: TabBar(
           controller: _tabController,
@@ -66,31 +83,34 @@ class _CategoryManagePageState extends State<CategoryManagePage>
             Tab(text: '账单分类'),
             Tab(text: '筛选类型'),
             Tab(text: '分组管理'),
+            Tab(text: '开关设置'),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          if (_tabController.index == 0) {
-            CategoryDialogs.showAddCategoryDialog(context, onSuccess: _loadData);
-          } else if (_tabController.index == 1) {
-            CategoryDialogs.showAddFilterTypeDialog(
-              context,
-              customCategories: _customCategories,
-              existingFilterTypes: _filterTypes,
-              existingGroups: _categoryGroups, // 传递分组列表
-              onSuccess: _loadData,
-            );
-          } else {
-            CategoryDialogs.showAddGroupDialog(
-              context,
-              existingGroups: _categoryGroups,
-              onSuccess: _loadData,
-            );
-          }
-        },
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: _tabController.index == 3
+          ? null
+          : FloatingActionButton(
+              onPressed: () {
+                if (_tabController.index == 0) {
+                  CategoryDialogs.showAddCategoryDialog(context, onSuccess: _loadData);
+                } else if (_tabController.index == 1) {
+                  CategoryDialogs.showAddFilterTypeDialog(
+                    context,
+                    customCategories: _customCategories,
+                    existingFilterTypes: _filterTypes,
+                    existingGroups: _categoryGroups, // 传递分组列表
+                    onSuccess: _loadData,
+                  );
+                } else if (_tabController.index == 2) {
+                  CategoryDialogs.showAddGroupDialog(
+                    context,
+                    existingGroups: _categoryGroups,
+                    onSuccess: _loadData,
+                  );
+                }
+              },
+              child: const Icon(Icons.add),
+            ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : TabBarView(
@@ -102,6 +122,8 @@ class _CategoryManagePageState extends State<CategoryManagePage>
                 _buildFilterTypeTab(theme),
                 // Tab 3: 分组管理
                 _buildGroupTab(theme),
+                // Tab 4: 开关设置
+                _buildToggleTab(theme),
               ],
             ),
     );
@@ -251,10 +273,10 @@ class _CategoryManagePageState extends State<CategoryManagePage>
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: wechatColor.withOpacity(0.15),
+                    color: wechatColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: wechatColor.withOpacity(0.3),
+                      color: wechatColor.withValues(alpha: 0.3),
                     ),
                   ),
                   child: Text(
@@ -300,10 +322,10 @@ class _CategoryManagePageState extends State<CategoryManagePage>
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: alipayColor.withOpacity(0.15),
+                    color: alipayColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: alipayColor.withOpacity(0.3),
+                      color: alipayColor.withValues(alpha: 0.3),
                     ),
                   ),
                   child: Text(
@@ -462,7 +484,7 @@ class _CategoryManagePageState extends State<CategoryManagePage>
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         if (_categoryGroups.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 24),
@@ -563,6 +585,57 @@ class _CategoryManagePageState extends State<CategoryManagePage>
               }).toList(),
             ),
           ),
+      ],
+    );
+  }
+
+  Widget _buildToggleTab(ThemeData theme) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text(
+          '开关设置',
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '控制启动动画与首页图标说明的显示策略',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: Column(
+            children: [
+              ListTile(
+                title: const Text('开机动画'),
+                subtitle: const Text('开启：启用开机动画；关闭：关闭开机动画（首次启动默认启用一次）'),
+                trailing: Transform.scale(
+                  scale: 0.88,
+                  child: Switch.adaptive(
+                    value: _playStartupAnimation,
+                    onChanged: _updateStartupAnimationEnabled,
+                  ),
+                ),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                title: const Text('首页图标说明'),
+                subtitle: const Text('开启：启用文字与图标动态效果；关闭：恢复静态图标（首次启动默认启用一次）'),
+                trailing: Transform.scale(
+                  scale: 0.88,
+                  child: Switch.adaptive(
+                    value: _homeIconGuideEnabled,
+                    onChanged: _updateHomeIconGuideEnabled,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }

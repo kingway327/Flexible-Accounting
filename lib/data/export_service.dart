@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:csv/csv.dart';
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -72,17 +73,18 @@ class ExportService {
       // 保存到临时文件
       final directory = await getTemporaryDirectory();
       final now = DateTime.now();
-      final dateStr = DateFormat('yyyyMMdd').format(now);
-      
-      // 文件名格式：账单导出_年份(月份)_当前日期.csv
+      final exportDateStr = DateFormat('yyyyMMdd').format(now);
+
+      // 文件名格式：账单导出_年份(月份)_导出日期yyyyMMdd.csv
+      // 使用“导出日期”前缀避免与账单年份混淆（例如：2025年 与 20260214）
       String fileName;
       if (filterByYear) {
-        fileName = '账单导出_$year年_$dateStr.csv';
+        fileName = '账单导出_$year年_导出日期$exportDateStr.csv';
       } else {
         final monthStr = month != null ? '$month'.padLeft(2, '0') : '';
-        fileName = '账单导出_$year年$monthStr月_$dateStr.csv';
+        fileName = '账单导出_$year年$monthStr月_导出日期$exportDateStr.csv';
       }
-      
+
       final file = File('${directory.path}/$fileName');
       await file.writeAsString(csvWithBom);
 
@@ -93,7 +95,9 @@ class ExportService {
       );
 
       return true;
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('导出CSV失败: $e');
+      debugPrintStack(stackTrace: stackTrace);
       return false;
     }
   }

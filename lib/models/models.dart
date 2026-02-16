@@ -15,10 +15,12 @@ class CategoryGroup {
 
   final int id;
   final String name;
+
   /// 颜色值，存储为 ARGB 整数（如 0xFF4CAF50）
   final int color;
   final int sortOrder;
   final int createdAt;
+
   /// 是否为系统预置分组（微信、支付宝、自定义），系统分组不可改名、不可删除
   final bool isSystem;
 
@@ -42,6 +44,23 @@ class CategoryGroup {
       createdAt: map['created_at'] as int,
       isSystem: (map['is_system'] as int? ?? 0) == 1,
     );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is CategoryGroup &&
+        other.id == id &&
+        other.name == name &&
+        other.color == color &&
+        other.sortOrder == sortOrder &&
+        other.createdAt == createdAt &&
+        other.isSystem == isSystem;
+  }
+
+  @override
+  int get hashCode {
+    return Object.hash(id, name, color, sortOrder, createdAt, isSystem);
   }
 }
 
@@ -80,6 +99,22 @@ class CustomCategory {
       groupId: map['group_id'] as int?,
     );
   }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is CustomCategory &&
+        other.id == id &&
+        other.name == name &&
+        other.sortOrder == sortOrder &&
+        other.createdAt == createdAt &&
+        other.groupId == groupId;
+  }
+
+  @override
+  int get hashCode {
+    return Object.hash(id, name, sortOrder, createdAt, groupId);
+  }
 }
 
 /// 筛选类型（用于首页交易类型筛选）
@@ -117,9 +152,27 @@ class FilterType {
       groupId: map['group_id'] as int?,
     );
   }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is FilterType &&
+        other.id == id &&
+        other.name == name &&
+        other.sortOrder == sortOrder &&
+        other.createdAt == createdAt &&
+        other.groupId == groupId;
+  }
+
+  @override
+  int get hashCode {
+    return Object.hash(id, name, sortOrder, createdAt, groupId);
+  }
 }
 
 class TransactionRecord {
+  static const Object _unset = Object();
+
   TransactionRecord({
     required this.id,
     this.source = 'Alipay',
@@ -144,31 +197,47 @@ class TransactionRecord {
   final String description;
   final String account;
   final String originalData;
+
   /// 消费分类（餐饮美食、服饰装扮等，用于分析统计）
   final String? category;
+
   /// 交易类型（商户消费、红包、网购等，用于筛选）
   final String? transactionCategory;
+
   /// 用户备注
   final String? note;
 
   /// 复制并修改部分字段
   TransactionRecord copyWith({
-    String? category,
-    String? note,
+    String? id,
+    String? source,
+    TransactionType? type,
+    int? amount,
+    int? timestamp,
+    String? counterparty,
+    String? description,
+    String? account,
+    String? originalData,
+    Object? category = _unset,
+    Object? transactionCategory = _unset,
+    Object? note = _unset,
   }) {
     return TransactionRecord(
-      id: id,
-      source: source,
-      type: type,
-      amount: amount,
-      timestamp: timestamp,
-      counterparty: counterparty,
-      description: description,
-      account: account,
-      originalData: originalData,
-      category: category ?? this.category,
-      transactionCategory: transactionCategory,
-      note: note ?? this.note,
+      id: id ?? this.id,
+      source: source ?? this.source,
+      type: type ?? this.type,
+      amount: amount ?? this.amount,
+      timestamp: timestamp ?? this.timestamp,
+      counterparty: counterparty ?? this.counterparty,
+      description: description ?? this.description,
+      account: account ?? this.account,
+      originalData: originalData ?? this.originalData,
+      category:
+          identical(category, _unset) ? this.category : category as String?,
+      transactionCategory: identical(transactionCategory, _unset)
+          ? this.transactionCategory
+          : transactionCategory as String?,
+      note: identical(note, _unset) ? this.note : note as String?,
     );
   }
 
@@ -229,6 +298,42 @@ class TransactionRecord {
         return TransactionType.ignore;
     }
     return TransactionType.ignore;
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is TransactionRecord &&
+        other.id == id &&
+        other.source == source &&
+        other.type == type &&
+        other.amount == amount &&
+        other.timestamp == timestamp &&
+        other.counterparty == counterparty &&
+        other.description == description &&
+        other.account == account &&
+        other.originalData == originalData &&
+        other.category == category &&
+        other.transactionCategory == transactionCategory &&
+        other.note == note;
+  }
+
+  @override
+  int get hashCode {
+    return Object.hash(
+      id,
+      source,
+      type,
+      amount,
+      timestamp,
+      counterparty,
+      description,
+      account,
+      originalData,
+      category,
+      transactionCategory,
+      note,
+    );
   }
 }
 
