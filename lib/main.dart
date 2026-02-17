@@ -90,14 +90,21 @@ class _StartupHostState extends State<_StartupHost> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_showSplash) {
-      return const HomeScreen();
-    }
-
-    return SplashScreen(
-      isDaytime: widget.startupConfig.isDaytime,
-      markShownOnFinish: widget.startupConfig.markShownOnFinish,
-      onFinished: _onSplashFinished,
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 220),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) {
+        return FadeTransition(opacity: animation, child: child);
+      },
+      child: _showSplash
+          ? SplashScreen(
+              key: const ValueKey('startup_splash'),
+              isDaytime: widget.startupConfig.isDaytime,
+              markShownOnFinish: widget.startupConfig.markShownOnFinish,
+              onFinished: _onSplashFinished,
+            )
+          : const HomeScreen(key: ValueKey('home_screen')),
     );
   }
 }

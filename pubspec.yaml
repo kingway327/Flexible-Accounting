@@ -1,5 +1,5 @@
 name: local_first_finance
-version: 0.1.0
+version: 2.0.0+1
 description: Local-first finance app for WeChat Pay and Alipay CSV imports.
 publish_to: 'none'
 
