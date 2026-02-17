@@ -398,6 +398,7 @@ List<MonthlyTotal> getRecentMonthlyTotals({
   final results = <MonthlyTotal>[];
   final targetType =
       isExpense ? TransactionType.expense : TransactionType.income;
+  final cache = AnalysisCache.instance;
 
   // 获取数据的月份范围
   final dataRange = getDataMonthRange(records: records, isExpense: isExpense);
@@ -461,15 +462,14 @@ List<MonthlyTotal> getRecentMonthlyTotals({
     }
 
     // 统计该月总金额
-    var total = 0;
-    for (final record in records) {
-      if (record.type != targetType) continue;
-
-      final date = DateTime.fromMillisecondsSinceEpoch(record.timestamp);
-      if (date.year == targetYear && date.month == targetMonth) {
-        total += record.amount;
-      }
-    }
+    final total = cache.version > 0
+        ? cache.getMonthlyTotal(targetYear, targetMonth, isExpense)
+        : _fallbackMonthlyTotal(
+            records: records,
+            year: targetYear,
+            month: targetMonth,
+            targetType: targetType,
+          );
 
     monthInfos.add((year: targetYear, month: targetMonth, amount: total));
   }
@@ -499,6 +499,23 @@ List<MonthlyTotal> getRecentMonthlyTotals({
   }
 
   return results;
+}
+
+int _fallbackMonthlyTotal({
+  required List<TransactionRecord> records,
+  required int year,
+  required int month,
+  required TransactionType targetType,
+}) {
+  var total = 0;
+  for (final record in records) {
+    if (record.type != targetType) continue;
+    final date = DateTime.fromMillisecondsSinceEpoch(record.timestamp);
+    if (date.year == year && date.month == month) {
+      total += record.amount;
+    }
+  }
+  return total;
 }
 
 /// 获取用户数据的月份范围
@@ -653,6 +670,8 @@ List<WeeklyDailyTotal> getWeeklyDailyTotals({
 }) {
   final targetType =
       isExpense ? TransactionType.expense : TransactionType.income;
+  final cache = AnalysisCache.instance;
+  final useCache = cache.version > 0;
   final today = DateTime.now();
 
   // 计算本周周一
@@ -671,14 +690,21 @@ List<WeeklyDailyTotal> getWeeklyDailyTotals({
 
     // 统计该日金额
     int amount = 0;
-    for (final record in records) {
+    final targetRecords = useCache
+        ? cache.getDailyRecords(date.year, date.month, date.day)
+        : records;
+    for (final record in targetRecords) {
       if (record.type != targetType) continue;
-      final recordDate = DateTime.fromMillisecondsSinceEpoch(record.timestamp);
-      if (recordDate.year == date.year &&
-          recordDate.month == date.month &&
-          recordDate.day == date.day) {
-        amount += record.amount;
+      if (!useCache) {
+        final recordDate =
+            DateTime.fromMillisecondsSinceEpoch(record.timestamp);
+        if (recordDate.year != date.year ||
+            recordDate.month != date.month ||
+            recordDate.day != date.day) {
+          continue;
+        }
       }
+      amount += record.amount;
     }
 
     results.add(WeeklyDailyTotal(
@@ -730,6 +756,8 @@ List<CategoryTotal> getWeeklyCategoryTotals({
 }) {
   final targetType =
       isExpense ? TransactionType.expense : TransactionType.income;
+  final cache = AnalysisCache.instance;
+  final useCache = cache.version > 0;
   final categoryMap = <String, _CategoryAccumulator>{};
 
   // 计算目标周的周一和周日
@@ -739,24 +767,41 @@ List<CategoryTotal> getWeeklyCategoryTotals({
   final targetMonday = monday.add(Duration(days: weekOffset * 7));
   final targetSunday = targetMonday.add(const Duration(days: 6));
 
-  for (final record in records) {
-    if (record.type != targetType) continue;
-
-    final date = DateTime.fromMillisecondsSinceEpoch(record.timestamp);
-    final dateOnly = DateTime(date.year, date.month, date.day);
-
-    if (dateOnly.isBefore(targetMonday) || dateOnly.isAfter(targetSunday)) {
-      continue;
+  if (useCache) {
+    for (int i = 0; i < 7; i++) {
+      final date = targetMonday.add(Duration(days: i));
+      final dayRecords = cache.getDailyRecords(date.year, date.month, date.day);
+      for (final record in dayRecords) {
+        if (record.type != targetType) continue;
+        final category =
+            (record.category?.isNotEmpty == true) ? record.category! : '其他';
+        if (!categoryMap.containsKey(category)) {
+          categoryMap[category] = _CategoryAccumulator();
+        }
+        categoryMap[category]!.amount += record.amount;
+        categoryMap[category]!.count += 1;
+      }
     }
+  } else {
+    for (final record in records) {
+      if (record.type != targetType) continue;
 
-    final category =
-        (record.category?.isNotEmpty == true) ? record.category! : '其他';
+      final date = DateTime.fromMillisecondsSinceEpoch(record.timestamp);
+      final dateOnly = DateTime(date.year, date.month, date.day);
 
-    if (!categoryMap.containsKey(category)) {
-      categoryMap[category] = _CategoryAccumulator();
+      if (dateOnly.isBefore(targetMonday) || dateOnly.isAfter(targetSunday)) {
+        continue;
+      }
+
+      final category =
+          (record.category?.isNotEmpty == true) ? record.category! : '其他';
+
+      if (!categoryMap.containsKey(category)) {
+        categoryMap[category] = _CategoryAccumulator();
+      }
+      categoryMap[category]!.amount += record.amount;
+      categoryMap[category]!.count += 1;
     }
-    categoryMap[category]!.amount += record.amount;
-    categoryMap[category]!.count += 1;
   }
 
   return categoryMap.entries
@@ -1003,6 +1048,25 @@ bool hasDataForWeek({
   required bool isExpense,
   int weekOffset = 0,
 }) {
+  final cache = AnalysisCache.instance;
+  if (cache.version > 0) {
+    final targetType =
+        isExpense ? TransactionType.expense : TransactionType.income;
+    final daysSinceMonday = (referenceDate.weekday - 1);
+    final monday = DateTime(referenceDate.year, referenceDate.month,
+        referenceDate.day - daysSinceMonday);
+    final targetMonday = monday.add(Duration(days: weekOffset * 7));
+
+    for (int i = 0; i < 7; i++) {
+      final date = targetMonday.add(Duration(days: i));
+      final dayRecords = cache.getDailyRecords(date.year, date.month, date.day);
+      if (dayRecords.any((record) => record.type == targetType)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   final dailyTotals = getWeeklyDailyTotals(
     records: records,
     referenceDate: referenceDate,

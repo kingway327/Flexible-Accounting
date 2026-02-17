@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'data/app_settings_dao.dart';
 import 'data/database_helper.dart';
 import 'pages/splash_screen.dart';
 import 'providers/finance_provider.dart';
@@ -16,9 +17,10 @@ Future<StartupConfig> _loadStartupConfig() async {
   final hour = DateTime.now().hour;
   final isDaytime = hour >= 6 && hour < 18;
 
-  final db = DatabaseHelper.instance;
-  final animationEnabled = await db.getStartupAnimationEnabled();
-  final shownOnce = await db.hasShownStartupAnimationOnce();
+  await DatabaseHelper.instance.database;
+  final settingsDao = AppSettingsDao.instance;
+  final animationEnabled = await settingsDao.getStartupAnimationEnabled();
+  final shownOnce = await settingsDao.hasShownStartupAnimationOnce();
   final shouldShowSplash = animationEnabled || !shownOnce;
 
   return StartupConfig(

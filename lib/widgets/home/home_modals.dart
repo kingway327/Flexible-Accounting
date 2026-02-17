@@ -241,7 +241,7 @@ void showBatchNoteModal(BuildContext context, FinanceProvider provider) {
 void showYearPicker(BuildContext context, FinanceProvider provider) {
   final theme = Theme.of(context);
   final years = List.generate(31, (i) => 2030 - i);
-  final initialIndex = years.indexOf(provider.selectedYear);
+  final initialIndex = years.indexOf(provider.selectedYearModeYear);
   final scrollController = ScrollController(
     initialScrollOffset: initialIndex > 0 ? (initialIndex * 56.0) : 0,
   );
@@ -284,12 +284,12 @@ void showYearPicker(BuildContext context, FinanceProvider provider) {
                             hasData ? FontWeight.w500 : FontWeight.normal,
                       ),
                     ),
-                    trailing: provider.selectedYear == year
+                    trailing: provider.selectedYearModeYear == year
                         ? Icon(Icons.check, color: theme.colorScheme.primary)
                         : null,
                     onTap: () {
                       Navigator.pop(context);
-                      provider.updateMonthYear(year, provider.selectedMonth);
+                      provider.updateYearModeYear(year);
                     },
                   );
                 },

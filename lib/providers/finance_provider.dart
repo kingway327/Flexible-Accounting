@@ -1,14 +1,17 @@
 import 'dart:async';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 
 import '../data/analysis_helpers.dart';
+import '../data/app_settings_dao.dart';
+import '../data/category_dao.dart';
 import '../data/database_helper.dart';
 import '../data/export_service.dart';
-import '../data/parsers.dart';
+import '../data/transaction_dao.dart';
 import '../models/models.dart';
+import 'batch_edit_mixin.dart';
+import 'import_export_mixin.dart';
 
 /// 来源筛选枚举
 enum SourceFilter { all, alipay, wechat }
@@ -17,8 +20,11 @@ enum SourceFilter { all, alipay, wechat }
 enum TypeFilter { all, expense, income, notCounted }
 
 /// 财务数据状态管理 Provider
-class FinanceProvider extends ChangeNotifier {
-  final _db = DatabaseHelper.instance;
+class FinanceProvider extends ChangeNotifier
+    with BatchEditMixin, ImportExportMixin {
+  final _txDao = TransactionDao.instance;
+  final _categoryDao = CategoryDao.instance;
+  final _settingsDao = AppSettingsDao.instance;
   final _export = ExportService.instance;
   final _currencyFormatter =
       NumberFormat.currency(symbol: '¥', decimalDigits: 2);
@@ -28,7 +34,8 @@ class FinanceProvider extends ChangeNotifier {
   bool _loading = false;
   bool _initializing = true;
   SourceFilter _currentFilter = SourceFilter.all;
-  int _selectedYear = DateTime.now().year;
+  int _selectedMonthModeYear = DateTime.now().year;
+  int _selectedYearModeYear = DateTime.now().year;
   int _selectedMonth = DateTime.now().month;
   bool _filterByYear = false;
 
@@ -53,15 +60,14 @@ class FinanceProvider extends ChangeNotifier {
   // 分类分组（从数据库加载）
   List<CategoryGroup> _categoryGroups = [];
 
-  // 批量编辑状态
-  bool _isBatchEditing = false;
-  Set<String> _selectedIds = {};
-
   // ==================== 缓存优化 ====================
   bool _filterCacheDirty = true;
   List<TransactionRecord>? _filteredRecordsCache;
   List<TransactionRecord>? _dbFilteredRecords;
   String? _snackBarMessage;
+
+  int get _activeSelectedYear =>
+      _filterByYear ? _selectedYearModeYear : _selectedMonthModeYear;
 
   /// 获取筛选后的记录（带缓存）
   List<TransactionRecord> get records {
@@ -108,9 +114,9 @@ class FinanceProvider extends ChangeNotifier {
 
   Future<void> _refreshDbFilteredRecords({bool notify = true}) async {
     try {
-      _dbFilteredRecords = await _db.fetchTransactionsWithFilters(
+      _dbFilteredRecords = await _txDao.fetchTransactionsWithFilters(
         source: _selectedSourceValue(),
-        year: _selectedYear,
+        year: _activeSelectedYear,
         month: _selectedMonth,
         filterByYear: _filterByYear,
         type: _selectedTypeValue(),
@@ -147,7 +153,9 @@ class FinanceProvider extends ChangeNotifier {
   bool get loading => _loading;
   bool get initializing => _initializing;
   SourceFilter get currentFilter => _currentFilter;
-  int get selectedYear => _selectedYear;
+  int get selectedYear => _activeSelectedYear;
+  int get selectedMonthModeYear => _selectedMonthModeYear;
+  int get selectedYearModeYear => _selectedYearModeYear;
   int get selectedMonth => _selectedMonth;
   bool get filterByYear => _filterByYear;
   String get searchQuery => _searchQuery;
@@ -162,10 +170,42 @@ class FinanceProvider extends ChangeNotifier {
       _typeFilter != TypeFilter.all || _selectedCategories.isNotEmpty;
   String formatAmount(int cents) => _currencyFormatter.format(cents / 100);
 
-  // 批量编辑 getters
-  bool get isBatchEditing => _isBatchEditing;
-  Set<String> get selectedIds => _selectedIds;
-  int get selectedCount => _selectedIds.length;
+  @override
+  TransactionDao get transactionDao => _txDao;
+
+  @override
+  ExportService get exportService => _export;
+
+  @override
+  Future<void> reloadData() => _reload();
+
+  @override
+  void setLoadingState(bool value) => _setLoading(value);
+
+  @override
+  void showImportResultSnack(int inserted, int duplicates) {
+    _showResultSnack(inserted, duplicates);
+  }
+
+  @override
+  set snackBarMessage(String? message) {
+    _snackBarMessage = message;
+  }
+
+  @override
+  Set<String> get recordIdsInCurrentView => records.map((r) => r.id).toSet();
+
+  @override
+  List<TransactionRecord> get recordsForExport => records;
+
+  @override
+  int get exportSelectedYear => _activeSelectedYear;
+
+  @override
+  int get exportSelectedMonth => _selectedMonth;
+
+  @override
+  bool get exportFilterByYear => _filterByYear;
 
   void _setLoading(bool value) {
     _loading = value;
@@ -203,50 +243,80 @@ class FinanceProvider extends ChangeNotifier {
   }
 
   Future<void> _restoreSelectedMonthYear() async {
-    final selected = await _db.getHomeLastViewedMonthYear();
-    if (selected == null) {
-      await _persistSelectedMonthYear(
-          year: _selectedYear, month: _selectedMonth);
-      return;
+    final selectedMonthState = await _settingsDao.getHomeLastViewedMonthYear();
+    if (selectedMonthState == null) {
+      await _persistMonthModeMonthYear(
+        year: _selectedMonthModeYear,
+        month: _selectedMonth,
+      );
+    } else {
+      final monthModeYear = selectedMonthState['year'];
+      final month = selectedMonthState['month'];
+      if (monthModeYear != null && month != null && month >= 1 && month <= 12) {
+        _selectedMonthModeYear = monthModeYear;
+        _selectedMonth = month;
+      }
     }
 
-    final year = selected['year'];
-    final month = selected['month'];
-    if (year == null || month == null || month < 1 || month > 12) {
-      return;
+    final yearModeYear = await _settingsDao.getHomeLastViewedYearModeYear();
+    if (yearModeYear != null) {
+      _selectedYearModeYear = yearModeYear;
+    } else {
+      _selectedYearModeYear = _selectedMonthModeYear;
+      unawaited(_persistYearModeYear(_selectedYearModeYear));
     }
 
-    _selectedYear = year;
-    _selectedMonth = month;
+    final lastFilterByYear = await _settingsDao.getHomeLastFilterByYear();
+    if (lastFilterByYear != null) {
+      _filterByYear = lastFilterByYear;
+    }
   }
 
-  Future<void> _persistSelectedMonthYear({
+  Future<void> _persistMonthModeMonthYear({
     required int year,
     required int month,
   }) async {
     try {
-      await _db.setHomeLastViewedMonthYear(year: year, month: month);
+      await _settingsDao.setHomeLastViewedMonthYear(year: year, month: month);
     } catch (e, stackTrace) {
       debugPrint('保存首页年月失败: $e');
       debugPrintStack(stackTrace: stackTrace);
     }
   }
 
+  Future<void> _persistYearModeYear(int year) async {
+    try {
+      await _settingsDao.setHomeLastViewedYearModeYear(year: year);
+    } catch (e, stackTrace) {
+      debugPrint('保存首页按年年份失败: $e');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+  }
+
+  Future<void> _persistFilterByYearMode(bool filterByYear) async {
+    try {
+      await _settingsDao.setHomeLastFilterByYear(filterByYear: filterByYear);
+    } catch (e, stackTrace) {
+      debugPrint('保存首页筛选模式失败: $e');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+  }
+
   /// 加载分类分组
   Future<void> _loadCategoryGroups() async {
-    _categoryGroups = await _db.fetchCategoryGroups();
+    _categoryGroups = await _categoryDao.fetchCategoryGroups();
   }
 
   /// 加载筛选类型选项
   Future<void> _loadFilterTypes() async {
-    final types = await _db.fetchFilterTypes();
+    final types = await _categoryDao.fetchFilterTypes();
     _filterTypes = types;
     _filterTypeOptions = types.map((t) => t.name).toList();
   }
 
   /// 加载自定义分类
   Future<void> _loadCustomCategories() async {
-    final categories = await _db.fetchCustomCategories();
+    final categories = await _categoryDao.fetchCustomCategories();
     _customCategoryObjects = categories;
     _customCategories = categories.map((c) => c.name).toList();
   }
@@ -279,7 +349,7 @@ class FinanceProvider extends ChangeNotifier {
           DatabaseHelper.resolveGroupIdFromMap(ft.name, groupMap);
 
       if (targetGroupId != null && ft.groupId != targetGroupId) {
-        await _db.updateFilterTypeGroup(ft.id, targetGroupId);
+        await _categoryDao.updateFilterTypeGroup(ft.id, targetGroupId);
         needsReload = true;
       }
     }
@@ -289,70 +359,8 @@ class FinanceProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> importFile() async {
-    _setLoading(true);
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['csv', 'xlsx', 'xls'],
-        withData: true,
-      );
-      if (result == null || result.files.isEmpty) {
-        _setLoading(false);
-        return;
-      }
-      final file = result.files.single;
-      final bytes = file.bytes ?? Uint8List(0);
-      final extension = file.extension?.toLowerCase();
-      List<TransactionRecord> records;
-      if (extension == 'xlsx' || extension == 'xls') {
-        final rows = decodeExcelBytes(bytes);
-        final source = FileTypeDetector.detectSourceFromRows(rows);
-        records = source == 'WeChat'
-            ? WechatParser.parseRows(rows)
-            : AlipayParser.parseRows(rows);
-      } else {
-        final content = await decodeCsvBytes(bytes);
-        final source = FileTypeDetector.detectSource(content);
-        records = source == 'WeChat'
-            ? WechatParser.parse(content)
-            : AlipayParser.parse(content);
-      }
-      final inserted = await _db.insertTransactions(records);
-      final duplicates = records.length - inserted;
-      await _reload();
-      _setLoading(false);
-      _showResultSnack(inserted, duplicates);
-    } catch (e, stackTrace) {
-      _setLoading(false);
-      _snackBarMessage = '导入失败，请检查文件格式后重试';
-      debugPrint('导入文件失败: $e');
-      debugPrintStack(stackTrace: stackTrace);
-      notifyListeners();
-    }
-  }
-
-  /// 清空所有数据
-  Future<void> clearAllData() async {
-    _setLoading(true);
-    try {
-      final deleted = await _db.clearAllTransactions();
-      AnalysisCache.instance.clear();
-      await _reload();
-      _setLoading(false);
-      _snackBarMessage = '已清空 $deleted 条记录';
-      notifyListeners();
-    } catch (e, stackTrace) {
-      _setLoading(false);
-      _snackBarMessage = '清空失败，请重试';
-      debugPrint('清空数据失败: $e');
-      debugPrintStack(stackTrace: stackTrace);
-      notifyListeners();
-    }
-  }
-
   Future<void> _reload() async {
-    _records = await _db.fetchTransactions();
+    _records = await _txDao.fetchTransactions();
     AnalysisCache.instance.rebuild(_records);
     await _refreshDbFilteredRecords(notify: false);
     _invalidateFilterCache();
@@ -370,11 +378,26 @@ class FinanceProvider extends ChangeNotifier {
   }
 
   void updateMonthYear(int year, int month) {
-    if (_selectedYear == year && _selectedMonth == month) return;
-    _selectedYear = year;
+    if (_selectedMonthModeYear == year && _selectedMonth == month) return;
+    _selectedMonthModeYear = year;
     _selectedMonth = month;
-    unawaited(_persistSelectedMonthYear(year: year, month: month));
+    unawaited(_persistMonthModeMonthYear(year: year, month: month));
+    if (_filterByYear) {
+      notifyListeners();
+      return;
+    }
     _scheduleDbFilterRefresh();
+  }
+
+  void updateYearModeYear(int year) {
+    if (_selectedYearModeYear == year) return;
+    _selectedYearModeYear = year;
+    unawaited(_persistYearModeYear(year));
+    if (_filterByYear) {
+      _scheduleDbFilterRefresh();
+      return;
+    }
+    notifyListeners();
   }
 
   void updateSearchQuery(String query) {
@@ -405,6 +428,7 @@ class FinanceProvider extends ChangeNotifier {
   void updateFilterByYear(bool value) {
     if (_filterByYear == value) return;
     _filterByYear = value;
+    unawaited(_persistFilterByYearMode(value));
     _scheduleDbFilterRefresh();
   }
 
@@ -419,7 +443,7 @@ class FinanceProvider extends ChangeNotifier {
 
       // 年月筛选
       final date = DateTime.fromMillisecondsSinceEpoch(record.timestamp);
-      final matchesYear = date.year == _selectedYear;
+      final matchesYear = date.year == _activeSelectedYear;
       if (_filterByYear) {
         if (!matchesYear) return false;
       } else {
@@ -476,103 +500,8 @@ class FinanceProvider extends ChangeNotifier {
     return {'expense': expense, 'income': income};
   }
 
-  /// 导出当前筛选的账单数据
-  Future<void> exportCurrentData() async {
-    _setLoading(true);
-    try {
-      final dataToExport = records;
-      final success = await _export.exportToCsv(
-        dataToExport,
-        year: _selectedYear,
-        month: _selectedMonth,
-        filterByYear: _filterByYear,
-      );
-      _setLoading(false);
-      _snackBarMessage =
-          success ? '已导出 ${dataToExport.length} 条记录' : '导出失败，请重试';
-      notifyListeners();
-    } catch (e, stackTrace) {
-      _setLoading(false);
-      _snackBarMessage = '导出失败，请重试';
-      debugPrint('导出当前数据失败: $e');
-      debugPrintStack(stackTrace: stackTrace);
-      notifyListeners();
-    }
-  }
-
   /// 获取所有未筛选的数据
   List<TransactionRecord> get allRecords => _records;
-
-  // ==================== 批量编辑方法 ====================
-
-  /// 切换批量编辑模式
-  void toggleBatchEdit() {
-    _isBatchEditing = !_isBatchEditing;
-    if (!_isBatchEditing) _selectedIds.clear();
-    notifyListeners();
-  }
-
-  /// 退出批量编辑模式
-  void exitBatchEdit() {
-    _isBatchEditing = false;
-    _selectedIds.clear();
-    notifyListeners();
-  }
-
-  /// 切换单条记录的选中状态
-  void toggleSelection(String id) {
-    if (_selectedIds.contains(id)) {
-      _selectedIds.remove(id);
-    } else {
-      _selectedIds.add(id);
-    }
-    notifyListeners();
-  }
-
-  /// 全选当前筛选后的所有记录
-  void selectAll() {
-    _selectedIds = records.map((r) => r.id).toSet();
-    notifyListeners();
-  }
-
-  /// 清空选择
-  void clearSelection() {
-    _selectedIds.clear();
-    notifyListeners();
-  }
-
-  /// 批量更新分类
-  Future<void> updateBatchCategory(String category) async {
-    if (_selectedIds.isEmpty) return;
-    _setLoading(true);
-    try {
-      final count =
-          await _db.batchUpdateCategory(_selectedIds.toList(), category);
-      await _reload();
-      _isBatchEditing = false;
-      _selectedIds.clear();
-      _snackBarMessage = '已更新 $count 条记录的分类';
-      notifyListeners();
-    } finally {
-      _setLoading(false);
-    }
-  }
-
-  /// 批量更新备注
-  Future<void> updateBatchNote(String note) async {
-    if (_selectedIds.isEmpty) return;
-    _setLoading(true);
-    try {
-      final count = await _db.batchUpdateNote(_selectedIds.toList(), note);
-      await _reload();
-      _isBatchEditing = false;
-      _selectedIds.clear();
-      _snackBarMessage = '已更新 $count 条记录的备注';
-      notifyListeners();
-    } finally {
-      _setLoading(false);
-    }
-  }
 
   @override
   void dispose() {

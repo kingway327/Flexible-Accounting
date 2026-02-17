@@ -3,7 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
-import '../data/database_helper.dart';
+import '../data/app_settings_dao.dart';
 
 /// 启动动画页面
 /// 根据当前时间自动选择白天/夜晚视频，约3.33倍速播放（6秒→1.8秒），静音
@@ -24,7 +24,7 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
-  final _db = DatabaseHelper.instance;
+  final _settingsDao = AppSettingsDao.instance;
   VideoPlayerController? _controller;
   bool _initialized = false;
 
@@ -72,7 +72,7 @@ class _SplashScreenState extends State<SplashScreen> {
         position.inMilliseconds >= duration.inMilliseconds - 100) {
       controller.removeListener(_onVideoProgress);
       if (widget.markShownOnFinish) {
-        await _db.markStartupAnimationShownOnce();
+        await _settingsDao.markStartupAnimationShownOnce();
       }
       if (!mounted) return;
       _finish();

@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/analysis_helpers.dart';
-import '../../data/database_helper.dart';
+import '../../data/app_settings_dao.dart';
 import '../../pages/analysis_page.dart';
 import '../../pages/category_manage_page.dart';
 import '../../pages/transaction_detail_page.dart';
@@ -23,8 +24,10 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   static const double _kNormalToolbarHeight = 84;
+  static const double _kScrollToTopTriggerOffset = 320;
+  static const double _kScrollToTopTopGap = 12;
 
-  final _db = DatabaseHelper.instance;
+  final _settingsDao = AppSettingsDao.instance;
   final _listScrollController = ScrollController();
   Timer? _guideCycleTimer;
   Timer? _guideHideTimer;
@@ -32,6 +35,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _floatingGuideVisible = false;
   bool _markGuideShownPending = false;
   bool _showScrollToTop = false;
+  bool _floatingSliverAppBarVisible = true;
 
   @override
   void initState() {
@@ -44,11 +48,34 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!_listScrollController.hasClients) {
       return;
     }
-    final shouldShow = _listScrollController.offset > 320;
-    if (shouldShow == _showScrollToTop) {
+    final position = _listScrollController.position;
+    if (position.outOfRange) {
       return;
     }
-    setState(() => _showScrollToTop = shouldShow);
+    final clampedOffset = position.pixels
+        .clamp(position.minScrollExtent, position.maxScrollExtent)
+        .toDouble();
+    final shouldShow = position.maxScrollExtent >= _kScrollToTopTriggerOffset &&
+        clampedOffset >= _kScrollToTopTriggerOffset;
+    var nextFloatingSliverAppBarVisible = _floatingSliverAppBarVisible;
+    if (clampedOffset <= position.minScrollExtent + 0.5) {
+      nextFloatingSliverAppBarVisible = true;
+    } else {
+      final direction = position.userScrollDirection;
+      if (direction == ScrollDirection.forward) {
+        nextFloatingSliverAppBarVisible = true;
+      } else if (direction == ScrollDirection.reverse) {
+        nextFloatingSliverAppBarVisible = false;
+      }
+    }
+    if (shouldShow == _showScrollToTop &&
+        nextFloatingSliverAppBarVisible == _floatingSliverAppBarVisible) {
+      return;
+    }
+    setState(() {
+      _showScrollToTop = shouldShow;
+      _floatingSliverAppBarVisible = nextFloatingSliverAppBarVisible;
+    });
   }
 
   void _scrollToTop() {
@@ -63,8 +90,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _applyHomeIconGuidePolicy() async {
-    final guideEnabled = await _db.getHomeIconGuideEnabled();
-    final shownOnce = await _db.hasShownHomeIconGuide();
+    final guideEnabled = await _settingsDao.getHomeIconGuideEnabled();
+    final shownOnce = await _settingsDao.hasShownHomeIconGuide();
     final shouldEnable = guideEnabled || !shownOnce;
 
     if (!mounted) {
@@ -102,7 +129,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _floatingGuideVisible = true);
     if (_markGuideShownPending) {
       _markGuideShownPending = false;
-      _db.markHomeIconGuideShown();
+      _settingsDao.markHomeIconGuideShown();
     }
     _guideHideTimer = Timer(const Duration(seconds: 8), () {
       if (!mounted) return;
@@ -118,7 +145,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  Widget _buildScrollToTopFab() {
+  Widget _buildScrollToTopFab({required bool visible}) {
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 220),
       switchInCurve: Curves.easeOutCubic,
@@ -132,10 +159,10 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         );
       },
-      child: _showScrollToTop
+      child: visible
           ? FloatingActionButton.small(
               key: const ValueKey('scroll_to_top_fab'),
-              heroTag: 'scroll_to_top_fab',
+              heroTag: null,
               tooltip: '回到顶部',
               onPressed: _scrollToTop,
               child: const Icon(Icons.keyboard_arrow_up),
@@ -239,9 +266,10 @@ class _HomeScreenState extends State<HomeScreen> {
         }
 
         final records = provider.records;
-        final scrollToTopInset = provider.isBatchEditing
-            ? 12.0
-            : MediaQuery.of(context).padding.top + _kNormalToolbarHeight + 12;
+        final scrollToTopInset =
+            MediaQuery.of(context).padding.top + _kScrollToTopTopGap;
+        final showScrollToTopFab = _showScrollToTop &&
+            (provider.isBatchEditing || !_floatingSliverAppBarVisible);
 
         return Scaffold(
           appBar: scaffoldAppBar,
@@ -294,7 +322,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           } else {
                             showMonthYearPicker(
                               context,
-                              initialYear: provider.selectedYear,
+                              initialYear: provider.selectedMonthModeYear,
                               initialMonth: provider.selectedMonth,
                               onConfirm: provider.updateMonthYear,
                               hasDataForYearMonth: (year, month) =>
@@ -359,7 +387,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Positioned(
                 top: scrollToTopInset,
                 right: 12,
-                child: _buildScrollToTopFab(),
+                child: _buildScrollToTopFab(visible: showScrollToTopFab),
               ),
               if (!provider.isBatchEditing)
                 _buildBottomActionOverlay(context, provider),
@@ -385,105 +413,78 @@ class _HomeScreenState extends State<HomeScreen> {
       toolbarHeight: _kNormalToolbarHeight,
       floating: true,
       snap: true,
-      title: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text('记账'),
-          const SizedBox(width: 12),
-          DateRangeRadio(
-            filterByYear: provider.filterByYear,
-            onChanged: provider.updateFilterByYear,
-          ),
-        ],
-      ),
-      actions: [
-        TopActionGuideButton(
-          icon: Icons.file_download_outlined,
-          tooltip: '导出账单',
-          guideLabel: '导出账单',
-          guideVisible: _floatingGuideFeatureEnabled,
-          onPressed: provider.loading ? null : provider.exportCurrentData,
-        ),
-        TopActionGuideButton(
-          icon: Icons.analytics_outlined,
-          tooltip: '收支分析',
-          guideLabel: '收支分析',
-          guideVisible: _floatingGuideFeatureEnabled,
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const AnalysisPage()),
-            );
-          },
-        ),
-        TopActionGuideButton(
-          icon: Icons.settings_outlined,
-          tooltip: '系统设置',
-          guideLabel: '系统设置',
-          guideVisible: _floatingGuideFeatureEnabled,
-          onPressed: () async {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const CategoryManagePage()),
-            );
-            if (!context.mounted) return;
-            await _applyHomeIconGuidePolicy();
-          },
-        ),
-      ],
+      title: _buildAppBarTitle(provider),
+      actions: _buildAppBarActions(context, provider),
     );
   }
 
   AppBar _buildNormalAppBar(BuildContext context, FinanceProvider provider) {
     return AppBar(
       toolbarHeight: _kNormalToolbarHeight,
-      title: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text('记账'),
-          const SizedBox(width: 12),
-          DateRangeRadio(
-            filterByYear: provider.filterByYear,
-            onChanged: provider.updateFilterByYear,
-          ),
-        ],
-      ),
-      actions: [
-        TopActionGuideButton(
-          icon: Icons.file_download_outlined,
-          tooltip: '导出账单',
-          guideLabel: '导出账单',
-          guideVisible: _floatingGuideFeatureEnabled,
-          onPressed: provider.loading ? null : provider.exportCurrentData,
-        ),
-        TopActionGuideButton(
-          icon: Icons.analytics_outlined,
-          tooltip: '收支分析',
-          guideLabel: '收支分析',
-          guideVisible: _floatingGuideFeatureEnabled,
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const AnalysisPage()),
-            );
-          },
-        ),
-        TopActionGuideButton(
-          icon: Icons.settings_outlined,
-          tooltip: '系统设置',
-          guideLabel: '系统设置',
-          guideVisible: _floatingGuideFeatureEnabled,
-          onPressed: () async {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const CategoryManagePage()),
-            );
-            if (!context.mounted) return;
-            await _applyHomeIconGuidePolicy();
-          },
+      title: _buildAppBarTitle(provider),
+      actions: _buildAppBarActions(context, provider),
+    );
+  }
+
+  Widget _buildAppBarTitle(FinanceProvider provider) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text('记账'),
+        const SizedBox(width: 12),
+        DateRangeRadio(
+          filterByYear: provider.filterByYear,
+          onChanged: provider.updateFilterByYear,
         ),
       ],
     );
+  }
+
+  List<Widget> _buildAppBarActions(
+    BuildContext context,
+    FinanceProvider provider,
+  ) {
+    return [
+      TopActionGuideButton(
+        icon: Icons.file_download_outlined,
+        tooltip: '导出账单',
+        guideLabel: '导出账单',
+        guideVisible: _floatingGuideFeatureEnabled,
+        onPressed: provider.loading ? null : provider.exportCurrentData,
+      ),
+      TopActionGuideButton(
+        icon: Icons.analytics_outlined,
+        tooltip: '收支分析',
+        guideLabel: '收支分析',
+        guideVisible: _floatingGuideFeatureEnabled,
+        onPressed: () => _openAnalysisPage(context),
+      ),
+      TopActionGuideButton(
+        icon: Icons.settings_outlined,
+        tooltip: '系统设置',
+        guideLabel: '系统设置',
+        guideVisible: _floatingGuideFeatureEnabled,
+        onPressed: () => _openSettingsPage(context),
+      ),
+    ];
+  }
+
+  Future<void> _openAnalysisPage(BuildContext context) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const AnalysisPage(),
+      ),
+    );
+  }
+
+  Future<void> _openSettingsPage(BuildContext context) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const CategoryManagePage()),
+    );
+    if (!context.mounted) return;
+    await _applyHomeIconGuidePolicy();
   }
 
   AppBar _buildBatchEditAppBar(BuildContext context, FinanceProvider provider) {

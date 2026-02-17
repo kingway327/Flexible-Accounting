@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
-import '../data/database_helper.dart';
+import '../data/category_dao.dart';
+import '../data/transaction_dao.dart';
 import '../constants/categories.dart';
 import '../providers/finance_provider.dart';
 import '../models/models.dart';
@@ -22,7 +23,7 @@ class TransactionDetailPage extends StatefulWidget {
 }
 
 class _TransactionDetailPageState extends State<TransactionDetailPage> {
-  final _db = DatabaseHelper.instance;
+  final _txDao = TransactionDao.instance;
   final _dateFormatter = DateFormat('yyyy-MM-dd HH:mm:ss');
   final _currencyFormatter =
       NumberFormat.currency(symbol: '¥', decimalDigits: 2);
@@ -82,7 +83,7 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
           Navigator.pop(bottomSheetContext);
           setState(() => _saving = true);
           try {
-            await _db.updateTransaction(
+            await _txDao.updateTransaction(
               id: _record.id,
               category: category,
             );
@@ -164,7 +165,7 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                     final messenger = ScaffoldMessenger.of(context);
                     setState(() => _saving = true);
                     try {
-                      await _db.updateTransaction(
+                      await _txDao.updateTransaction(
                         id: _record.id,
                         note: _noteController.text.trim(),
                       );
@@ -519,7 +520,7 @@ class _CategoryPickerSheet extends StatefulWidget {
 }
 
 class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
-  final _db = DatabaseHelper.instance;
+  final _categoryDao = CategoryDao.instance;
   late String _selected;
   List<CustomCategory> _customCategories = [];
   List<CategoryGroup> _categoryGroups = [];
@@ -540,12 +541,12 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
   }
 
   Future<void> _loadCustomCategories() async {
-    _customCategories = await _db.fetchCustomCategories();
+    _customCategories = await _categoryDao.fetchCustomCategories();
     setState(() => _loading = false);
   }
 
   Future<void> _loadCategoryGroups() async {
-    _categoryGroups = await _db.fetchCategoryGroups();
+    _categoryGroups = await _categoryDao.fetchCategoryGroups();
     setState(() {});
   }
 

@@ -4,6 +4,9 @@ import 'package:intl/intl.dart';
 import '../../models/models.dart';
 import '../../providers/finance_provider.dart';
 
+final NumberFormat _currencyFormatter =
+    NumberFormat.currency(symbol: '¥', decimalDigits: 2);
+
 /// 来源筛选组件
 class SourceFilterWidget extends StatelessWidget {
   const SourceFilterWidget({
@@ -57,8 +60,7 @@ class TransactionTile extends StatelessWidget {
     final time = DateFormat('MM-dd HH:mm').format(
       DateTime.fromMillisecondsSinceEpoch(record.timestamp),
     );
-    final amount = NumberFormat.currency(symbol: '¥', decimalDigits: 2)
-        .format(record.amount / 100);
+    final amount = _currencyFormatter.format(record.amount / 100);
 
     return ListTile(
       onTap: onTap,
@@ -138,9 +140,8 @@ class MonthSummaryRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final formatter = NumberFormat.currency(symbol: '¥', decimalDigits: 2);
-    final expense = formatter.format((summary['expense'] ?? 0) / 100);
-    final income = formatter.format((summary['income'] ?? 0) / 100);
+    final expense = _currencyFormatter.format((summary['expense'] ?? 0) / 100);
+    final income = _currencyFormatter.format((summary['income'] ?? 0) / 100);
 
     return Row(
       children: [

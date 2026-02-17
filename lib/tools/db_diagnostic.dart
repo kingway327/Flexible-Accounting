@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:local_first_finance/data/category_dao.dart';
 import 'package:local_first_finance/data/database_helper.dart';
 import 'package:local_first_finance/models/models.dart';
 
@@ -9,10 +10,11 @@ Future<void> main() async {
 
   final db = DatabaseHelper.instance;
   await db.database; // 确保数据库已初始化
+  final categoryDao = CategoryDao.instance;
 
   // 1. 检查分组数据
   debugPrint('【1. 检查分组数据】');
-  final groups = await db.fetchCategoryGroups();
+  final groups = await categoryDao.fetchCategoryGroups();
   debugPrint('分组数量: ${groups.length}');
   for (final group in groups) {
     debugPrint(
@@ -23,7 +25,7 @@ Future<void> main() async {
 
   // 2. 检查筛选类型数据
   debugPrint('【2. 检查筛选类型数据】');
-  final filterTypes = await db.fetchFilterTypes();
+  final filterTypes = await categoryDao.fetchFilterTypes();
   debugPrint('筛选类型数量: ${filterTypes.length}');
 
   int noGroupCount = 0;
@@ -110,7 +112,7 @@ Future<void> main() async {
     debugPrint('');
     debugPrint('【5. 修复方案】');
     debugPrint('正在自动修复...');
-    await _fixDatabase(db, groups, wechatTypes, alipayTypes);
+    await _fixDatabase(categoryDao, groups, wechatTypes, alipayTypes);
     debugPrint('✅ 修复完成！');
   }
 
@@ -119,7 +121,7 @@ Future<void> main() async {
 
 /// 修复数据库数据
 Future<void> _fixDatabase(
-  DatabaseHelper db,
+  CategoryDao dao,
   List<CategoryGroup> groups,
   Set<String> wechatTypes,
   Set<String> alipayTypes,
@@ -129,7 +131,7 @@ Future<void> _fixDatabase(
   final alipayGroupId = groupMap['支付宝'];
   final customGroupId = groupMap['自定义'];
 
-  final filterTypes = await db.fetchFilterTypes();
+  final filterTypes = await dao.fetchFilterTypes();
 
   for (final ft in filterTypes) {
     int? targetGroupId;
@@ -148,12 +150,12 @@ Future<void> _fixDatabase(
 
     // 如果需要更新
     if (targetGroupId != null && ft.groupId != targetGroupId) {
-      await db.updateFilterTypeGroup(ft.id, targetGroupId);
+      await dao.updateFilterTypeGroup(ft.id, targetGroupId);
     }
   }
 
   debugPrint('\n修复后重新检查...');
-  final updatedFilterTypes = await db.fetchFilterTypes();
+  final updatedFilterTypes = await dao.fetchFilterTypes();
   final stillNoGroup =
       updatedFilterTypes.where((ft) => ft.groupId == null).length;
   if (stillNoGroup == 0) {

@@ -1,156 +1,146 @@
 # AGENTS.md - local_first_finance
+Operational guide for coding agents in this repository.
 
-Guidelines for coding agents working in this Flutter/Dart repository.
+## 1) Project Scope
+- App type: Flutter local-first finance app.
+- Language: Dart (`>=3.3.0 <4.0.0`).
+- State: `provider` + `ChangeNotifier`.
+- Storage: SQLite via `sqflite`.
+- Core folders: `lib/`, `test/`, `assets/`, platform folders.
 
-## 1) Scope and Tech Stack
+## 2) Rule Sources
+- Lint config is `analysis_options.yaml`.
+- Lint base is `package:flutter_lints/flutter.yaml`.
+- No active custom lint overrides (commented examples only).
+- Cursor rules: no `.cursorrules`, no `.cursor/rules/`.
+- Copilot rules: no `.github/copilot-instructions.md`.
 
-- Project type: Flutter app (`pubspec.yaml`) with Android/iOS/macOS/Linux/Windows targets.
-- Language: Dart (SDK `>=3.3.0 <4.0.0`).
-- State management: `provider` + `ChangeNotifier`.
-- Persistence: `sqflite` (SQLite), local-first data model.
-- Key folders: `lib/`, `test/`, `android/`, `ios/`, `macos/`, `linux/`, `windows/`.
+## 3) Standard Commands
+Run commands from repo root (`local_first_finance/`).
 
-## 2) Source of Truth for Rules
-
-- Lint config: `analysis_options.yaml` includes `package:flutter_lints/flutter.yaml`.
-- There are no custom enabled lint overrides; commented examples only.
-- No `.cursorrules` found.
-- No `.cursor/rules/` found.
-- No `.github/copilot-instructions.md` found.
-
-## 3) Build / Run / Analyze Commands
-
-Run from repository root (`local_first_finance/`).
-
+### Setup / Run
 ```bash
 flutter pub get
 flutter run
-flutter analyze
-dart format .
-```
-
-Useful targeted commands:
-
-```bash
-flutter analyze lib/providers/finance_provider.dart
-dart format lib/main.dart
 flutter clean
 ```
 
-Platform builds (when needed):
+### Lint / Format
+```bash
+flutter analyze
+flutter analyze lib/providers/finance_provider.dart
+dart format .
+dart format lib/pages/analysis_page.dart
+```
 
+### Tests
+```bash
+flutter test
+flutter test test/widget_test.dart
+flutter test test/models_test.dart
+flutter test test/widget_test.dart --plain-name "App builds"
+flutter test --coverage
+flutter test -r expanded
+```
+
+### Build Examples
 ```bash
 flutter build apk --release
 flutter build ios --release
 flutter build windows --release
 ```
 
-## 4) Test Commands (including single-test)
+## 4) Single-Test Guidance (Important)
+- For focused changes, run one test file first.
+- For one test case, use `--plain-name "<name>"`.
+- Before handoff, run at least relevant files; prefer full `flutter test` when feasible.
 
-```bash
-flutter test
-flutter test test/widget_test.dart
-flutter test test/widget_test.dart --plain-name "App builds"
-flutter test --coverage
-flutter test -r expanded
-```
+## 5) Data-Layer Architecture
+- Keep DB initialization/migrations in `DatabaseHelper`.
+- Use DAOs for feature data access:
+  - `TransactionDao`
+  - `CategoryDao`
+  - `AppSettingsDao`
+- All DAOs must use `DatabaseHelper.instance.database` (single connection source).
+- Do not create parallel DB helpers or extra DB files unless explicitly requested.
 
-Notes:
-- Prefer running the most local test scope first (single file or single case).
-- Current test suite is minimal; avoid assuming broad coverage.
-
-## 5) Import and File Organization
-
-Follow observed import grouping pattern:
+## 6) Import Organization
+Use import groups in this order with one blank line between groups:
 1. Dart SDK imports
 2. Flutter imports
-3. Third-party package imports
-4. Project imports (relative paths are common)
+3. Third-party packages
+4. Project imports (relative imports are common here)
 
-Example pattern:
-
+Example:
 ```dart
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../data/database_helper.dart';
+import '../data/transaction_dao.dart';
 import '../models/models.dart';
 ```
 
-Keep one blank line between groups.
+## 7) Formatting Rules
+- Canonical formatter: `dart format`.
+- Indentation: 2 spaces.
+- Prefer trailing commas in multiline widget/argument lists.
+- Prefer `const` constructors/widgets where possible.
+- Keep changes minimal and cohesive; avoid unrelated refactors in bugfix tasks.
 
-## 6) Naming Conventions
-
-- Classes/enums: `PascalCase` (`TransactionRecord`, `FinanceProvider`).
-- Methods/variables/params: `camelCase`.
-- Private members/types: leading underscore (`_records`, `_StartupHost`).
+## 8) Naming Conventions
+- Types (classes/enums): `PascalCase`.
+- Methods/fields/params: `camelCase`.
+- Private symbols: leading underscore (`_name`).
 - File names: `snake_case.dart`.
-- Top-level constants: `kCamelCase` (`kLightBlue`, `kWechatTransactionTypes`).
+- Top-level constants: `kCamelCase`.
+- Private static constants in classes: `_kCamelCase`.
 
-## 7) Types and Data Modeling
+## 9) Types and Domain Modeling
+- Prefer explicit types for model and DAO interfaces.
+- Use nullability intentionally and validate boundaries.
+- DB map payloads should use `Map<String, Object?>`.
+- Money is integer cents (`int`), never floating amount storage.
+- Time is epoch milliseconds (`int`).
 
-- Avoid implicit dynamic for model fields; use explicit types.
-- Use nullable types intentionally (`String?`, `int?`).
-- Prefer `final` unless mutation is required.
-- For DB maps, use `Map<String, Object?>`.
-- Encode money in integer cents, not floating currency.
-- Store time as epoch milliseconds (`int`).
+## 10) State Management
+- App-level mutable state belongs in providers (`ChangeNotifier`).
+- Call `notifyListeners()` after meaningful state updates.
+- Use `context.read/watch` or `Consumer` patterns.
+- Keep expensive I/O out of widget `build()`.
 
-## 8) State Management and UI Patterns
+## 11) Async and Error Handling
+- Wrap I/O and DB operations in `try/catch`.
+- Keep user-facing failures graceful (existing snackbar/safe fallback patterns).
+- Avoid noisy logging where current code is intentionally quiet.
+- If logging is needed, use concise `debugPrint` style.
+- Never throw from `build()` methods.
 
-- App-wide state lives in provider classes extending `ChangeNotifier`.
-- Trigger updates via `notifyListeners()` after state changes.
-- Access providers via `context.read<T>()`, `context.watch<T>()`, or `Consumer<T>`.
-- Prefer `const` widgets/constructors wherever possible.
-- Use `StatefulWidget` only when local mutable UI state is needed.
+## 12) DAO and DB Behavior Safety
+- Keep method signatures stable during refactors unless requested.
+- Preserve cross-table sync semantics (custom category/filter/group behavior).
+- Preserve app-settings keys and compatibility behavior unless migration is explicit.
+- Prefer batch operations for bulk inserts/updates.
 
-## 9) Database and Service Patterns
+## 13) UI/Widget Guidelines
+- Extract reusable components instead of deep inline widget trees.
+- Keep callback types explicit (`ValueChanged<T>`, `VoidCallback`).
+- Keep transitions/animations predictable and testable.
+- Add narrow regression tests for UI behavior changes when practical.
 
-- `DatabaseHelper` is a singleton (`DatabaseHelper._()` + `instance`).
-- DB/service methods are asynchronous and return typed results.
-- Use batch operations for multi-row writes when possible.
-- Keep conversion boundaries explicit (`toMap`/`fromMap`).
+## 14) Verification Checklist
+Before final handoff:
+1. Run `dart format` on changed files.
+2. Run `flutter analyze`.
+3. Run narrow relevant tests first.
+4. Run `flutter test` when feasible.
+5. Summarize what changed and how to verify.
 
-## 10) Error Handling Expectations
+## 15) Files to Treat Carefully
+- Do not hand-edit generated files (for example `windows/flutter/ephemeral/`).
+- Modify platform folders only when task requires platform-level changes.
+- `lib/main.dart.backup` is not primary source unless explicitly requested.
+- Migration logic in `DatabaseHelper` should be edited cautiously and verified.
 
-- Wrap I/O and DB calls in `try/catch`.
-- In user-facing flows, graceful failure with UI feedback is preferred.
-- Silent catches exist in current code; do not add noisy logging by default.
-- Do not throw from widget build paths.
-
-When adding new error handling:
-- Preserve app responsiveness first.
-- Return safe defaults when behavior already follows that pattern.
-- Log only where the surrounding code already logs.
-
-## 11) Formatting and Style
-
-- Use `dart format` output as canonical formatting.
-- 2-space indentation.
-- Trailing commas in multiline widget/argument lists.
-- Keep methods focused and cohesive; avoid unrelated refactors in bug fixes.
-
-## 12) Testing Guidance for Agents
-
-- Add/adjust widget tests when changing UI behavior.
-- Keep test names behavior-focused.
-- Use `pumpWidget`, finders, and explicit expectations.
-- For fixes, prefer adding a narrow regression test when practical.
-
-## 13) Files Agents Should Treat Carefully
-
-- Generated/ephemeral Flutter files (for example under `windows/flutter/ephemeral/`) should not be hand-edited.
-- Platform build files (`android/`, `ios/`, `macos/`, `windows/`, `linux/`) should be touched only when task-relevant.
-- `lib/main.dart.backup` exists; do not treat it as primary source unless task explicitly references it.
-
-## 14) Practical Workflow for Agentic Edits
-
-1. Read `analysis_options.yaml`, `pubspec.yaml`, and nearby feature files first.
-2. Make minimal, surgical changes aligned with existing patterns.
-3. Run `dart format` on changed files.
-4. Run `flutter analyze`.
-5. Run the narrowest relevant tests, then broader tests as needed.
-
-This document is evidence-based from the current repository state and should be updated when tooling or conventions change.
+Keep this document updated when architecture, tooling, or repository rules change.

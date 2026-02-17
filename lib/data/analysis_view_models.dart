@@ -63,12 +63,7 @@ WeeklyTabViewData buildWeeklyTabViewData({
     isExpense: isExpense,
     weekOffset: weekOffset - 1,
   );
-  final weeklyTotal = getWeeklyTotal(
-    records: records,
-    referenceDate: referenceDate,
-    isExpense: isExpense,
-    weekOffset: weekOffset,
-  );
+  final weeklyTotal = weeklyDailyTotals.fold(0, (sum, e) => sum + e.amount);
   final weeklyCategoryTotals = getWeeklyCategoryTotals(
     records: records,
     referenceDate: referenceDate,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../data/database_helper.dart';
+import '../data/app_settings_dao.dart';
+import '../data/category_dao.dart';
 import '../constants/categories.dart';
 import '../models/models.dart';
 import '../widgets/filter_type_grid_item.dart';
@@ -16,7 +17,8 @@ class CategoryManagePage extends StatefulWidget {
 
 class _CategoryManagePageState extends State<CategoryManagePage>
     with SingleTickerProviderStateMixin {
-  final _db = DatabaseHelper.instance;
+  final _categoryDao = CategoryDao.instance;
+  final _settingsDao = AppSettingsDao.instance;
   late TabController _tabController;
 
   // 账单分类
@@ -51,22 +53,22 @@ class _CategoryManagePageState extends State<CategoryManagePage>
 
   Future<void> _loadData() async {
     setState(() => _loading = true);
-    _customCategories = await _db.fetchCustomCategories();
-    _filterTypes = await _db.fetchFilterTypes();
-    _categoryGroups = await _db.fetchCategoryGroups();
-    _playStartupAnimation = await _db.getStartupAnimationEnabled();
-    _homeIconGuideEnabled = await _db.getHomeIconGuideEnabled();
+    _customCategories = await _categoryDao.fetchCustomCategories();
+    _filterTypes = await _categoryDao.fetchFilterTypes();
+    _categoryGroups = await _categoryDao.fetchCategoryGroups();
+    _playStartupAnimation = await _settingsDao.getStartupAnimationEnabled();
+    _homeIconGuideEnabled = await _settingsDao.getHomeIconGuideEnabled();
     setState(() => _loading = false);
   }
 
   Future<void> _updateStartupAnimationEnabled(bool enabled) async {
     setState(() => _playStartupAnimation = enabled);
-    await _db.setStartupAnimationEnabled(enabled);
+    await _settingsDao.setStartupAnimationEnabled(enabled);
   }
 
   Future<void> _updateHomeIconGuideEnabled(bool enabled) async {
     setState(() => _homeIconGuideEnabled = enabled);
-    await _db.setHomeIconGuideEnabled(enabled);
+    await _settingsDao.setHomeIconGuideEnabled(enabled);
   }
 
   @override
@@ -92,7 +94,8 @@ class _CategoryManagePageState extends State<CategoryManagePage>
           : FloatingActionButton(
               onPressed: () {
                 if (_tabController.index == 0) {
-                  CategoryDialogs.showAddCategoryDialog(context, onSuccess: _loadData);
+                  CategoryDialogs.showAddCategoryDialog(context,
+                      onSuccess: _loadData);
                 } else if (_tabController.index == 1) {
                   CategoryDialogs.showAddFilterTypeDialog(
                     context,
@@ -144,7 +147,6 @@ class _CategoryManagePageState extends State<CategoryManagePage>
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-
         // 自定义分类
         Text(
           '自定义分类',
@@ -172,10 +174,12 @@ class _CategoryManagePageState extends State<CategoryManagePage>
               children: _customCategories.asMap().entries.map((entry) {
                 final index = entry.key;
                 final category = entry.value;
-                final group = category.groupId != null 
-                    ? _categoryGroups.firstWhere((g) => g.id == category.groupId, orElse: () => _categoryGroups[0]) // 简单回退
+                final group = category.groupId != null
+                    ? _categoryGroups.firstWhere(
+                        (g) => g.id == category.groupId,
+                        orElse: () => _categoryGroups[0]) // 简单回退
                     : null;
-                
+
                 return Column(
                   children: [
                     ListTile(
@@ -208,7 +212,8 @@ class _CategoryManagePageState extends State<CategoryManagePage>
                           IconButton(
                             icon: const Icon(Icons.folder_outlined),
                             tooltip: '设置分组',
-                            onPressed: () => CategoryDialogs.showSetCategoryGroupDialog(
+                            onPressed: () =>
+                                CategoryDialogs.showSetCategoryGroupDialog(
                               context,
                               category: category,
                               existingGroups: _categoryGroups,
@@ -217,15 +222,18 @@ class _CategoryManagePageState extends State<CategoryManagePage>
                           ),
                           IconButton(
                             icon: const Icon(Icons.edit_outlined),
-                            onPressed: () => CategoryDialogs.showEditCategoryDialog(
+                            onPressed: () =>
+                                CategoryDialogs.showEditCategoryDialog(
                               context,
                               category: category,
                               onSuccess: _loadData,
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.delete_outline, color: Colors.red),
-                            onPressed: () => CategoryDialogs.showDeleteCategoryDialog(
+                            icon: const Icon(Icons.delete_outline,
+                                color: Colors.red),
+                            onPressed: () =>
+                                CategoryDialogs.showDeleteCategoryDialog(
                               context,
                               category: category,
                               onSuccess: _loadData,
@@ -352,7 +360,7 @@ class _CategoryManagePageState extends State<CategoryManagePage>
     for (final ft in _filterTypes) {
       filterTypesByGroup.putIfAbsent(ft.groupId, () => []).add(ft);
     }
-    
+
     // 获取所有分组ID并排序
     // 无分组放在最前面，其他按 sortOrder 排序
     final sortedGroupIds = filterTypesByGroup.keys.toList()
@@ -433,7 +441,8 @@ class _CategoryManagePageState extends State<CategoryManagePage>
                     GridView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 4,
                         crossAxisSpacing: 10,
                         mainAxisSpacing: 10,
@@ -446,7 +455,8 @@ class _CategoryManagePageState extends State<CategoryManagePage>
                           filterType: filterType,
                           groupName: groupName,
                           groupColor: groupColor,
-                          onTap: () => CategoryDialogs.showFilterTypeActionSheet(
+                          onTap: () =>
+                              CategoryDialogs.showFilterTypeActionSheet(
                             context,
                             filterType: filterType,
                             groupName: groupName,
@@ -505,7 +515,8 @@ class _CategoryManagePageState extends State<CategoryManagePage>
                 final index = entry.key;
                 final group = entry.value;
                 // 统计该分组下的筛选类型数量
-                final filterCount = _filterTypes.where((f) => f.groupId == group.id).length;
+                final filterCount =
+                    _filterTypes.where((f) => f.groupId == group.id).length;
                 return Column(
                   children: [
                     ListTile(
@@ -523,9 +534,11 @@ class _CategoryManagePageState extends State<CategoryManagePage>
                           if (group.isSystem) ...[
                             const SizedBox(width: 8),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: theme.colorScheme.surfaceContainerHighest,
+                                color:
+                                    theme.colorScheme.surfaceContainerHighest,
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
@@ -546,7 +559,8 @@ class _CategoryManagePageState extends State<CategoryManagePage>
                           IconButton(
                             icon: const Icon(Icons.palette_outlined),
                             tooltip: '修改颜色',
-                            onPressed: () => CategoryDialogs.showEditGroupColorDialog(
+                            onPressed: () =>
+                                CategoryDialogs.showEditGroupColorDialog(
                               context,
                               group: group,
                               onSuccess: _loadData,
@@ -557,7 +571,8 @@ class _CategoryManagePageState extends State<CategoryManagePage>
                             IconButton(
                               icon: const Icon(Icons.edit_outlined),
                               tooltip: '编辑名称',
-                              onPressed: () => CategoryDialogs.showEditGroupDialog(
+                              onPressed: () =>
+                                  CategoryDialogs.showEditGroupDialog(
                                 context,
                                 group: group,
                                 existingGroups: _categoryGroups,
@@ -567,9 +582,11 @@ class _CategoryManagePageState extends State<CategoryManagePage>
                           // 删除按钮（仅非系统分组）
                           if (!group.isSystem)
                             IconButton(
-                              icon: const Icon(Icons.delete_outline, color: Colors.red),
+                              icon: const Icon(Icons.delete_outline,
+                                  color: Colors.red),
                               tooltip: '删除',
-                              onPressed: () => CategoryDialogs.showDeleteGroupDialog(
+                              onPressed: () =>
+                                  CategoryDialogs.showDeleteGroupDialog(
                                 context,
                                 group: group,
                                 onSuccess: _loadData,

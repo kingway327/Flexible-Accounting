@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../data/database_helper.dart';
+import '../../data/category_dao.dart';
 import '../../models/models.dart';
 import '../../providers/finance_provider.dart';
 import '../../constants/categories.dart';
@@ -10,7 +10,6 @@ import '../category_grid.dart';
 
 /// 分类/分组管理相关的对话框工具类
 class CategoryDialogs {
-  
   /// 显示添加分组对话框
   static Future<void> showAddGroupDialog(
     BuildContext context, {
@@ -64,7 +63,8 @@ class CategoryDialogs {
                             : null,
                       ),
                       child: isSelected
-                          ? const Icon(Icons.check, color: Colors.white, size: 20)
+                          ? const Icon(Icons.check,
+                              color: Colors.white, size: 20)
                           : null,
                     ),
                   );
@@ -96,7 +96,8 @@ class CategoryDialogs {
                   return;
                 }
 
-                await DatabaseHelper.instance.insertCategoryGroup(name, selectedColor);
+                await CategoryDao.instance
+                    .insertCategoryGroup(name, selectedColor);
                 if (context.mounted) {
                   Navigator.pop(context);
                   onSuccess();
@@ -168,7 +169,8 @@ class CategoryDialogs {
                             : null,
                       ),
                       child: isSelected
-                          ? const Icon(Icons.check, color: Colors.white, size: 20)
+                          ? const Icon(Icons.check,
+                              color: Colors.white, size: 20)
                           : null,
                     ),
                   );
@@ -192,7 +194,8 @@ class CategoryDialogs {
                 }
 
                 // 检查是否重名（排除自身）
-                final exists = existingGroups.any((g) => g.name == name && g.id != group.id);
+                final exists = existingGroups
+                    .any((g) => g.name == name && g.id != group.id);
                 if (exists) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('该分组名称已存在')),
@@ -200,7 +203,8 @@ class CategoryDialogs {
                   return;
                 }
 
-                await DatabaseHelper.instance.updateCategoryGroup(group.id, name: name, color: selectedColor);
+                await CategoryDao.instance.updateCategoryGroup(group.id,
+                    name: name, color: selectedColor);
                 if (context.mounted) {
                   Navigator.pop(context);
                   onSuccess();
@@ -260,7 +264,8 @@ class CategoryDialogs {
                             : null,
                       ),
                       child: isSelected
-                          ? const Icon(Icons.check, color: Colors.white, size: 20)
+                          ? const Icon(Icons.check,
+                              color: Colors.white, size: 20)
                           : null,
                     ),
                   );
@@ -279,7 +284,8 @@ class CategoryDialogs {
                   Navigator.pop(context);
                   return;
                 }
-                await DatabaseHelper.instance.updateCategoryGroup(group.id, color: selectedColor);
+                await CategoryDao.instance
+                    .updateCategoryGroup(group.id, color: selectedColor);
                 if (context.mounted) {
                   Navigator.pop(context);
                   onSuccess();
@@ -315,7 +321,7 @@ class CategoryDialogs {
           ),
           FilledButton(
             onPressed: () async {
-              await DatabaseHelper.instance.deleteCategoryGroup(group.id);
+              await CategoryDao.instance.deleteCategoryGroup(group.id);
               if (context.mounted) {
                 Navigator.pop(context);
                 onSuccess();
@@ -379,7 +385,8 @@ class CategoryDialogs {
               }
 
               // 检查是否与自定义分类重复
-              final exists = await DatabaseHelper.instance.isCategoryNameExists(name);
+              final exists =
+                  await CategoryDao.instance.isCategoryNameExists(name);
               if (exists) {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -389,7 +396,7 @@ class CategoryDialogs {
                 return;
               }
 
-              await DatabaseHelper.instance.insertCustomCategory(name);
+              await CategoryDao.instance.insertCustomCategory(name);
               if (context.mounted) {
                 Navigator.pop(context);
                 onSuccess();
@@ -457,7 +464,8 @@ class CategoryDialogs {
               }
 
               // 检查是否与自定义分类重复
-              final exists = await DatabaseHelper.instance.isCategoryNameExists(name);
+              final exists =
+                  await CategoryDao.instance.isCategoryNameExists(name);
               if (exists) {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -467,7 +475,8 @@ class CategoryDialogs {
                 return;
               }
 
-              await DatabaseHelper.instance.updateCustomCategory(category.id, name);
+              await CategoryDao.instance
+                  .updateCustomCategory(category.id, name);
               if (context.mounted) {
                 Navigator.pop(context);
                 onSuccess();
@@ -502,7 +511,7 @@ class CategoryDialogs {
           ),
           FilledButton(
             onPressed: () async {
-              await DatabaseHelper.instance.deleteCustomCategory(category.id);
+              await CategoryDao.instance.deleteCustomCategory(category.id);
               if (context.mounted) {
                 Navigator.pop(context);
                 onSuccess();
@@ -558,7 +567,8 @@ class CategoryDialogs {
                     ? const Icon(Icons.check, color: Colors.green)
                     : null,
                 onTap: () async {
-                  await DatabaseHelper.instance.updateCustomCategoryGroup(category.id, null);
+                  await CategoryDao.instance
+                      .updateCustomCategoryGroup(category.id, null);
                   if (context.mounted) {
                     Navigator.pop(context);
                     onSuccess();
@@ -584,7 +594,8 @@ class CategoryDialogs {
                       ? const Icon(Icons.check, color: Colors.green)
                       : null,
                   onTap: () async {
-                    await DatabaseHelper.instance.updateCustomCategoryGroup(category.id, group.id);
+                    await CategoryDao.instance
+                        .updateCustomCategoryGroup(category.id, group.id);
                     if (context.mounted) {
                       Navigator.pop(context);
                       onSuccess();
@@ -625,7 +636,7 @@ class CategoryDialogs {
   }) async {
     // 计算可用分类：系统分类 + 自定义分类 - 已有筛选类型
     final existingFilterNames = existingFilterTypes.map((f) => f.name).toSet();
-    
+
     // 分组计算可用分类
     final availableCustom = customCategories
         .map((c) => c.name)
@@ -638,7 +649,9 @@ class CategoryDialogs {
         .where((c) => !existingFilterNames.contains(c))
         .toList();
 
-    if (availableCustom.isEmpty && availableWechat.isEmpty && availableAlipay.isEmpty) {
+    if (availableCustom.isEmpty &&
+        availableWechat.isEmpty &&
+        availableAlipay.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('所有分类都已添加为筛选类型')),
       );
@@ -699,88 +712,101 @@ class CategoryDialogs {
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
                   child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // 自定义分类
-                        if (availableCustom.isNotEmpty) ...[
-                          Text(
-                            '自定义分类',
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 自定义分类
+                      if (availableCustom.isNotEmpty) ...[
+                        Text(
+                          '自定义分类',
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
                           ),
-                          const SizedBox(height: 12),
-                          CategoryGrid(
-                            categories: availableCustom,
-                            onCategoryTap: (category) async {
-                              await DatabaseHelper.instance.insertFilterType(category);
-                              if (context.mounted) {
-                                Navigator.pop(context);
-                                onSuccess();
-                                // 刷新 Provider 中的筛选类型
-                                context.read<FinanceProvider>().refreshFilterTypes();
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('已添加筛选类型「$category」')),
-                                );
-                              }
-                            },
-                          ),
-                          const SizedBox(height: 20),
-                        ],
-                        // 微信交易类型
-                        if (availableWechat.isNotEmpty) ...[
-                          Text(
-                            '微信交易类型',
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              color: wechatColor,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          CategoryGrid(
-                            categories: availableWechat,
-                            groupColorMap: {for (var c in availableWechat) c: wechatColor},
-                            onCategoryTap: (category) async {
-                              await DatabaseHelper.instance.insertFilterType(category);
-                              if (context.mounted) {
-                                Navigator.pop(context);
-                                onSuccess();
-                                context.read<FinanceProvider>().refreshFilterTypes();
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('已添加筛选类型「$category」')),
-                                );
-                              }
-                            },
-                          ),
-                          const SizedBox(height: 20),
-                        ],
-                        // 支付宝交易分类
-                        if (availableAlipay.isNotEmpty) ...[
-                          Text(
-                            '支付宝交易分类',
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              color: alipayColor,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          CategoryGrid(
-                            categories: availableAlipay,
-                            groupColorMap: {for (var c in availableAlipay) c: alipayColor},
-                            onCategoryTap: (category) async {
-                              await DatabaseHelper.instance.insertFilterType(category);
-                              if (context.mounted) {
-                                Navigator.pop(context);
-                                onSuccess();
-                                context.read<FinanceProvider>().refreshFilterTypes();
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('已添加筛选类型「$category」')),
-                                );
-                              }
-                            },
-                          ),
-                        ],
+                        ),
+                        const SizedBox(height: 12),
+                        CategoryGrid(
+                          categories: availableCustom,
+                          onCategoryTap: (category) async {
+                            await CategoryDao.instance
+                                .insertFilterType(category);
+                            if (context.mounted) {
+                              Navigator.pop(context);
+                              onSuccess();
+                              // 刷新 Provider 中的筛选类型
+                              context
+                                  .read<FinanceProvider>()
+                                  .refreshFilterTypes();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('已添加筛选类型「$category」')),
+                              );
+                            }
+                          },
+                        ),
+                        const SizedBox(height: 20),
                       ],
+                      // 微信交易类型
+                      if (availableWechat.isNotEmpty) ...[
+                        Text(
+                          '微信交易类型',
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: wechatColor,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        CategoryGrid(
+                          categories: availableWechat,
+                          groupColorMap: {
+                            for (var c in availableWechat) c: wechatColor
+                          },
+                          onCategoryTap: (category) async {
+                            await CategoryDao.instance
+                                .insertFilterType(category);
+                            if (context.mounted) {
+                              Navigator.pop(context);
+                              onSuccess();
+                              context
+                                  .read<FinanceProvider>()
+                                  .refreshFilterTypes();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('已添加筛选类型「$category」')),
+                              );
+                            }
+                          },
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+                      // 支付宝交易分类
+                      if (availableAlipay.isNotEmpty) ...[
+                        Text(
+                          '支付宝交易分类',
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: alipayColor,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        CategoryGrid(
+                          categories: availableAlipay,
+                          groupColorMap: {
+                            for (var c in availableAlipay) c: alipayColor
+                          },
+                          onCategoryTap: (category) async {
+                            await CategoryDao.instance
+                                .insertFilterType(category);
+                            if (context.mounted) {
+                              Navigator.pop(context);
+                              onSuccess();
+                              context
+                                  .read<FinanceProvider>()
+                                  .refreshFilterTypes();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('已添加筛选类型「$category」')),
+                              );
+                            }
+                          },
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ),
@@ -840,7 +866,8 @@ class CategoryDialogs {
               }
 
               // 检查是否已存在
-              final exists = await DatabaseHelper.instance.isFilterTypeNameExists(name);
+              final exists =
+                  await CategoryDao.instance.isFilterTypeNameExists(name);
               if (exists) {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -850,7 +877,7 @@ class CategoryDialogs {
                 return;
               }
 
-              await DatabaseHelper.instance.updateFilterType(filterType.id, name);
+              await CategoryDao.instance.updateFilterType(filterType.id, name);
               if (context.mounted) {
                 Navigator.pop(context);
                 onSuccess();
@@ -886,7 +913,7 @@ class CategoryDialogs {
           ),
           FilledButton(
             onPressed: () async {
-              await DatabaseHelper.instance.deleteFilterType(filterType.id);
+              await CategoryDao.instance.deleteFilterType(filterType.id);
               if (context.mounted) {
                 Navigator.pop(context);
                 onSuccess();
@@ -951,7 +978,8 @@ class CategoryDialogs {
                     ? const Icon(Icons.check, color: Colors.green)
                     : null,
                 onTap: () async {
-                  await DatabaseHelper.instance.updateFilterTypeGroup(filterType.id, null);
+                  await CategoryDao.instance
+                      .updateFilterTypeGroup(filterType.id, null);
                   if (context.mounted) {
                     Navigator.pop(context);
                     onSuccess();
@@ -976,7 +1004,8 @@ class CategoryDialogs {
                       ? const Icon(Icons.check, color: Colors.green)
                       : null,
                   onTap: () async {
-                    await DatabaseHelper.instance.updateFilterTypeGroup(filterType.id, group.id);
+                    await CategoryDao.instance
+                        .updateFilterTypeGroup(filterType.id, group.id);
                     if (context.mounted) {
                       Navigator.pop(context);
                       onSuccess();
@@ -1085,8 +1114,10 @@ class CategoryDialogs {
                     ),
                   // 删除（所有类型可用）
                   ListTile(
-                    leading: const Icon(Icons.delete_outline, color: Colors.red),
-                    title: const Text('删除', style: TextStyle(color: Colors.red)),
+                    leading:
+                        const Icon(Icons.delete_outline, color: Colors.red),
+                    title:
+                        const Text('删除', style: TextStyle(color: Colors.red)),
                     onTap: () {
                       Navigator.pop(context);
                       showDeleteFilterTypeDialog(

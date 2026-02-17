@@ -1,4 +1,5 @@
 import '../models/models.dart';
+import 'analysis_helpers.dart';
 
 List<TransactionRecord> getTransactionsForDayInMonth({
   required List<TransactionRecord> records,
@@ -9,9 +10,15 @@ List<TransactionRecord> getTransactionsForDayInMonth({
 }) {
   final targetType =
       isExpense ? TransactionType.expense : TransactionType.income;
-  final filtered = records.where((record) {
+  final cache = AnalysisCache.instance;
+  final sourceRecords =
+      cache.version > 0 ? cache.getDailyRecords(year, month, day) : records;
+  final filtered = sourceRecords.where((record) {
     if (record.type != targetType) {
       return false;
+    }
+    if (cache.version > 0) {
+      return true;
     }
     final date = DateTime.fromMillisecondsSinceEpoch(record.timestamp);
     return date.year == year && date.month == month && date.day == day;
@@ -29,13 +36,18 @@ List<TransactionRecord> getTransactionsForCategoryInMonth({
 }) {
   final targetType =
       isExpense ? TransactionType.expense : TransactionType.income;
-  final filtered = records.where((record) {
+  final cache = AnalysisCache.instance;
+  final sourceRecords =
+      cache.version > 0 ? cache.getMonthlyRecords(year, month) : records;
+  final filtered = sourceRecords.where((record) {
     if (record.type != targetType) {
       return false;
     }
-    final date = DateTime.fromMillisecondsSinceEpoch(record.timestamp);
-    if (date.year != year || date.month != month) {
-      return false;
+    if (cache.version == 0) {
+      final date = DateTime.fromMillisecondsSinceEpoch(record.timestamp);
+      if (date.year != year || date.month != month) {
+        return false;
+      }
     }
     return _normalizedCategory(record) == category;
   }).toList();
@@ -51,13 +63,18 @@ List<TransactionRecord> getTransactionsForCategoryInYear({
 }) {
   final targetType =
       isExpense ? TransactionType.expense : TransactionType.income;
-  final filtered = records.where((record) {
+  final cache = AnalysisCache.instance;
+  final sourceRecords =
+      cache.version > 0 ? cache.getYearlyRecords(year) : records;
+  final filtered = sourceRecords.where((record) {
     if (record.type != targetType) {
       return false;
     }
-    final date = DateTime.fromMillisecondsSinceEpoch(record.timestamp);
-    if (date.year != year) {
-      return false;
+    if (cache.version == 0) {
+      final date = DateTime.fromMillisecondsSinceEpoch(record.timestamp);
+      if (date.year != year) {
+        return false;
+      }
     }
     return _normalizedCategory(record) == category;
   }).toList();
@@ -80,14 +97,28 @@ List<TransactionRecord> getTransactionsForCategoryInWeek({
 
   final targetType =
       isExpense ? TransactionType.expense : TransactionType.income;
-  final filtered = records.where((record) {
+  final cache = AnalysisCache.instance;
+  final sourceRecords = <TransactionRecord>[];
+  if (cache.version > 0) {
+    for (int i = 0; i < 7; i++) {
+      final date = targetMonday.add(Duration(days: i));
+      sourceRecords
+          .addAll(cache.getDailyRecords(date.year, date.month, date.day));
+    }
+  } else {
+    sourceRecords.addAll(records);
+  }
+
+  final filtered = sourceRecords.where((record) {
     if (record.type != targetType) {
       return false;
     }
-    final date = DateTime.fromMillisecondsSinceEpoch(record.timestamp);
-    final dateOnly = DateTime(date.year, date.month, date.day);
-    if (dateOnly.isBefore(targetMonday) || dateOnly.isAfter(targetSunday)) {
-      return false;
+    if (cache.version == 0) {
+      final date = DateTime.fromMillisecondsSinceEpoch(record.timestamp);
+      final dateOnly = DateTime(date.year, date.month, date.day);
+      if (dateOnly.isBefore(targetMonday) || dateOnly.isAfter(targetSunday)) {
+        return false;
+      }
     }
     return _normalizedCategory(record) == category;
   }).toList();
@@ -103,9 +134,15 @@ List<TransactionRecord> getTransactionsForYearMonth({
 }) {
   final targetType =
       isExpense ? TransactionType.expense : TransactionType.income;
-  final filtered = records.where((record) {
+  final cache = AnalysisCache.instance;
+  final sourceRecords =
+      cache.version > 0 ? cache.getMonthlyRecords(year, month) : records;
+  final filtered = sourceRecords.where((record) {
     if (record.type != targetType) {
       return false;
+    }
+    if (cache.version > 0) {
+      return true;
     }
     final date = DateTime.fromMillisecondsSinceEpoch(record.timestamp);
     return date.year == year && date.month == month;
